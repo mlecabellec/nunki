@@ -1,0 +1,7 @@
+target/
+.mvn/
+*.class
+*.log
+.DS_Store
+src/main/frontend/node_modules/
+src/main/frontend/dist/
