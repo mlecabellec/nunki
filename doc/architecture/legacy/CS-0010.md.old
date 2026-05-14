@@ -1,0 +1,83 @@
+# Constraint 0010
+
+## Title
+C++ level and standards
+## Description
+
+This constraint applies on all code written in C++, excepting external dependencies (as coming in ext-projects).
+
+Regarding this constraint, the following rules apply:
+
+- [CS-0010.1] Use C++ 23 or higher. If definitions from standards higher than C++ 23 are used, the code shall be compatible with C++ 23 (at least regarding interfaces).
+- [CS-0010.2] When objects are passed by value, use move semantics instead of copy semantics.
+- [CS-0010.3] When objects are passed by reference, use const references instead of pointers.
+- [CS-0010.4] When objects are returned, use move semantics instead of copy semantics.
+- [CS-0010.5] When objects are shared by multiple threads, use thread-safe containers.
+- [CS-0010.6] When objects are shared by multiple objects with potential different lifecycles, use shared_ptr or weak_ptr.
+- [CS-0010.7] For object fields not shared across multiple objects, use unique_ptr.
+- [CS-0010.8] For objects used in a single scope (method body or lambda body), usage of unique_ptr is optional and discouraged.
+- [CS-0010.9] Use zero / one / three rule for constructor parameters where it's possible.
+- [CS-0010.10] Use of new or delete keywords is forbidden.
+- [CS-0010.11] Use of malloc or free keywords is forbidden.
+- [CS-0010.12] Use of calloc or realloc keywords is forbidden.
+- [CS-0010.13] Use of strdup or strndup keywords is forbidden.
+- [CS-0010.14] When functions from standard libraries relying on unbounded buffers are used, the code shall check for buffer overflow.
+- [CS-0010.15] When pointers are used as parameters, the code shall check for null pointers.
+- [CS-0010.16] Use of unbounded arrays is forbidden.
+- [CS-0010.17] Use of goto keywords is forbidden.
+- [CS-0010.18] Dead code is forbidden. This constraint is not applied to code intended to be used by external code. In this case, dead code is authorized if comments are inserted to explain the purpose of the code.
+- [CS-0010.19] Use of undefined behavior is forbidden.
+- [CS-0010.20] Use of exceptions is authorized. Use of exception is mandatory where called functions can throw exceptions and no other error propagation mechanism is used. In this case, the code shall catch exceptions and handle them. Alternatively, use of `std::expected` (or `outcome<T, E>`) as defined in [CS-0020.48] is authorized and encouraged for error-propagation in logic functions.
+- [CS-0010.21] Use of RAII is strongly recommended. Use of RAII is mandatory for mutexes.
+- [CS-0010.22] Use of RAII is mandatory for file handles.
+- [CS-0010.23] Use of RAII is mandatory for socket handles.
+- [CS-0010.24] Use of RAII is mandatory for memory mapped files.
+- [CS-0010.25] Use of RAII is recommended for memory allocation.
+- [CS-0010.26] Avoid usage of wait functions without timeout. When it's possible, use mutex with timeout.
+- [CS-0010.27] Avoid usage of sleep functions. When it's possible, use wait functions with timeout.
+- [CS-0010.28] Avoid usage of global variables.
+- [CS-0010.29] Avoid usage of global functions.
+- [CS-0010.30] Avoid usage of global constants.
+- [CS-0010.31] All declarations shall be explicit.
+- [CS-0010.32] All declarations shall be initialized.
+- [CS-0010.33] All declarations shall be contained in a namespace.
+- [CS-0010.34] Use of the "auto" type is strictly forbidden.
+- [CS-0010.35] No function body shall be longer than 200 lines. A limited number of waivers are authorized if the function length is justified by a comment block explaining why further decomposition would be detrimental to performance, clarity, or logical atomicity. Waivers must be reviewed and approved by a senior architect.
+- [CS-0010.36] No class body shall be longer than 1600 lines.
+- [CS-0010.37] Use of infinite loops is forbidden unless it is the only way to implement a particular feature. All loops shall be implemented with a hard limit on the number of iterations. When hard limit is reached, an exception should be thrown.
+- [CS-0010.38] Use of infinite recursion is forbidden unless it is the only way to implement a particular feature. All recursive calls shall be implemented with a hard limit on the number of iterations. When hard limit is reached, an exception should be thrown.
+- [CS-0010.39] When possible, literals shall be replaced by constants.
+- [CS-0010.40] When possible, constants shall be replaced by enums.
+- [CS-0010.41] When possible, enums shall be replaced by templates.
+- [CS-0010.42] When possible, templates shall be replaced by concepts.
+- [CS-0010.43] When possible, concepts shall be replaced by traits.
+- [CS-0010.44] A comment shall be inserted in each code block to explain its purpose. No code block without comments should be longer than 5 lines.
+- [CS-0010.45] Each class, field, method and member shall be documented with Doxygen comments.
+- [CS-0010.46] When a member field modification is protected by a mutex, all ways to modify this field shall be protected by the same (timed) mutex.
+
+
+## Rationale
+
+This constraint is intended to ensure that the code is written in a way that is easy to understand and maintain.
+
+## Verification
+
+*Note: These methods are not exhaustive. The developer (human or agent) SHALL ensure that applied verification is effective to ensure compliance and SHALL add verifications if required on a case-by-case basis.*
+
+Each rule must be covered by at least two scriptable verification methods:
+
+- **Method 1: Static Analysis (clang-tidy & cppcheck)**
+  - `clang-tidy` MUST be executed with `modernize-*`, `hicpp-*`, `cppcoreguidelines-*`, `bugprone-*`, `readability-*`, `google-*`, and custom AST matchers. This verifies [CS-0010.2 - CS-0010.4, CS-0010.6 - CS-0010.13, CS-0010.15 - CS-0010.17, CS-0010.20 - CS-0010.36, CS-0010.39 - CS-0010.46].
+  - `cppcheck --enable=all --error-exitcode=1 src/` MUST be executed in CI to verify rules [CS-0010.1, CS-0010.9, CS-0010.15, CS-0010.18, CS-0010.19, CS-0010.28 - CS-0010.32, CS-0010.34].
+- **Method 2: Dynamic Analysis (Valgrind & Sanitizers)**
+  - Memory and concurrency rules MUST be verified dynamically using `valgrind --leak-check=full --error-exitcode=1`. This acts as a second verification layer for [CS-0010.5 - CS-0010.8, CS-0010.10 - CS-0010.14, CS-0010.15, CS-0010.16, CS-0010.19, CS-0010.21 - CS-0010.25, CS-0010.37, CS-0010.38, CS-0010.46].
+  - CI builds MUST run tests compiled with AddressSanitizer and ThreadSanitizer to verify [CS-0010.5, CS-0010.14, CS-0010.16, CS-0010.19, CS-0010.46].
+- **Method 3: Shell Scripts & CI Hooks**
+  - A pre-commit hook script (`helpers/checkConstraintsCompliance.sh`) MUST grep for forbidden keywords and patterns. This verifies [CS-0010.1, CS-0010.5, CS-0010.10 - CS-0010.14, CS-0010.17, CS-0010.18, CS-0010.20, CS-0010.26 - CS-0010.36, CS-0010.39 - CS-0010.45].
+  - Line limits and comment density [CS-0010.35, CS-0010.36, CS-0010.44] MUST be verified using `lizard` or a custom `awk` script in CI.
+  - Doxygen documentation coverage [CS-0010.45] MUST be verified by running `doxygen` and parsing output for missing tags.
+- **Method 4: Code Coverage & Test Assertions**
+  - Bounded loops and recursions [CS-0010.37, CS-0010.38] MUST be verified via explicit unit tests pushing inputs to hard limits.
+  - Move semantics, reference usage, and RAII behavior [CS-0010.2 - CS-0010.4, CS-0010.9, CS-0010.21 - CS-0010.25] MUST be verified by unit tests using mocks and state inspection.
+  - Logic rules for global avoidance and namespaces [CS-0010.28 - CS-0010.30, CS-0010.33] MUST be cross-verified by `nm` (name list) analysis of generated binaries.
+

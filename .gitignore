@@ -1,7 +1,25 @@
+# Maven build artifacts
 target/
 .mvn/
 *.class
-*.log
-.DS_Store
+
+# Frontend Maven Plugin artifacts
+src/main/frontend/node/
 src/main/frontend/node_modules/
 src/main/frontend/dist/
+src/main/frontend/dist-ssr/
+
+# Transient application/system artifacts
+cur/
+new/
+tmp/
+
+# Logs
+*.log
+
+# IDEs and OS files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
