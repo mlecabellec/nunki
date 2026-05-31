@@ -36,7 +36,7 @@ RUN g++ -O3 -std=c++20 /quasar/quasar_server.cpp -o /quasar/build/quasar_server 
     -lquasar_opcua -lquasar_named -lquasar_coretypes -lopen62541 -lpthread
 
 # Run stage
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y \
     libssl3 libuuid1 zlib1g \
     && rm -rf /var/lib/apt/lists/*
