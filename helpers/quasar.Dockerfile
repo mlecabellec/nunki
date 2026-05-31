@@ -23,7 +23,7 @@ RUN mkdir build && cd build && \
 
 # Compile the standalone server (from nunki/helpers)
 COPY nunki/helpers/quasar_server.cpp /quasar/quasar_server.cpp
-RUN g++ -O3 /quasar/quasar_server.cpp -o /quasar/build/quasar_server \
+RUN g++ -O3 -std=c++20 /quasar/quasar_server.cpp -o /quasar/build/quasar_server \
     -I /quasar/cmake-projects/opcua/include \
     -I /quasar/cmake-projects/named/include \
     -I /quasar/cmake-projects/coretypes/include \
