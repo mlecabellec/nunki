@@ -3,6 +3,7 @@ FROM debian:trixie-slim AS build
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     build-essential cmake git pkg-config python3 file \
+    autoconf automake libtool \
     libasound2-dev libx11-dev libxrandr-dev libxi-dev \
     libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
     libgmp-dev libssl-dev uuid-dev zlib1g-dev binutils-dev libiberty-dev \
