@@ -29,6 +29,7 @@ RUN g++ -O3 /quasar/quasar_server.cpp -o /quasar/build/quasar_server \
     -I /quasar/cmake-projects/coretypes/include \
     -I /quasar/build/cmake-projects/third-party/open62541/src_generated \
     -I /quasar/cmake-projects/third-party/open62541/include \
+    -I /quasar/cmake-projects/third-party/open62541/plugins/include \
     -I /quasar/cmake-projects/third-party/open62541/arch \
     -L /quasar/build/cmake-projects/opcua \
     -L /quasar/build/cmake-projects/named \
