@@ -1,19 +1,56 @@
 # Nunki Helper Tools
 
-This directory contains tools for orchestration and deployment using Podman.
+This directory contains helper scripts and tools for building, orchestrating, running, and packaging the Nunki server (and its integrated C++ Quasar OPC UA server).
 
-## Orchestration with Podman
+## 1. Standalone Execution (`run-standalone.sh`)
 
-To build and launch the integrated environment (Quasar server + Nunki app), use `podman-compose`:
+This script manages Java/Maven dependency verification, application compilation, port overrides, and CLI mode forwarding for running Nunki in standalone mode.
 
 ```bash
-# From this directory
-podman-compose up --build
+# Display help and options
+./helpers/run-standalone.sh --help
+
+# Build and run Nunki server on the default port (8080)
+./helpers/run-standalone.sh
+
+# Run the existing build (skip clean compile)
+./helpers/run-standalone.sh -s
+
+# Run the server on a custom port
+./helpers/run-standalone.sh -p 8085
+
+# Execute the application in headless CLI mode
+./helpers/run-standalone.sh cli
+```
+
+## 2. Integrated Orchestration (`run-integrated.sh`)
+
+This script manages the multi-container integrated environment (Quasar OPC UA C++ Server + Nunki Client) using `docker compose` or `podman-compose`. It handles checking sibling repository layout correctness, automated tool detection, logs streaming, and live startup status validation.
+
+```bash
+# Display help and options
+./helpers/run-integrated.sh --help
+
+# Spin up and verify the integrated stack (detached by default)
+./helpers/run-integrated.sh up
+
+# Rebuild the containers (e.g., after modifying C++ Quasar server) and launch
+./helpers/run-integrated.sh up --build
+
+# View container logs
+./helpers/run-integrated.sh logs
+
+# View running container status
+./helpers/run-integrated.sh status
+
+# Tear down the stack and clean up networks/volumes
+./helpers/run-integrated.sh down
 ```
 
 ## Services
-- **Quasar (OPC UA Server)**: Exposed on port 4840.
-- **Nunki (Spring Boot App)**: Exposed on port 8080.
+- **Quasar (OPC UA Server)**: Exposed on port `4840`.
+- **Nunki (Spring Boot App)**: Exposed on port `8080` (or host-configured port).
 
 ## Configuration
-The connection between Nunki and Quasar is configured via the `QUASAR_OPCUA_URL` environment variable in `docker-compose.yml`.
+The integration connection between Nunki and Quasar is configured via the `QUASAR_OPCUA_URL` environment variable inside the compose stack.
+
