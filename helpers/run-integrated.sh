@@ -37,28 +37,86 @@ fi
 
 show_help() {
     cat << EOF
-Usage: $(basename "$0") [command] [options]
+Usage: $(basename "$0") <command> [options]
 
-Orchestrates the build and execution of the integrated environment:
-  - Quasar (OPC UA C++ Server)
-  - Nunki (Java Spring Boot Server Client)
+Practical orchestration helper script to build, run, stop, clean, and monitor the integrated multi-container environment.
+
+Services Managed:
+  1. Quasar OPC UA Server (C++ C++20 Server)
+     - Image: nunki/quasar:latest
+     - Container Name: quasar-server
+     - Exposes OPC UA port: 4840
+  2. Nunki Application Client (Java Spring Boot Server)
+     - Image: nunki/app:latest
+     - Container Name: nunki-app
+     - Exposes Web HTTP port: 8080
+     - Configured with endpoint: opc.tcp://quasar:4840
 
 Commands:
-  up         Build and start the integrated stack (detached mode by default)
-  down       Stop and clean up all containers, networks, and volumes
-  status     Show running containers and health status
-  logs       View and follow container logs
+  up         Build and launch the integrated server environment in detached background mode.
+  down       Gracefully stop, terminate, and remove all containers, networks, and volumes.
+  build      Explicitly rebuild container images (useful after changing Quasar C++ or Nunki Java source).
+  restart    Safely restart both servers without tearing down the compose network structure.
+  status     Show running containers, port assignments, and health states.
+  logs       View and stream live logs from both running servers concurrently.
+  clean      Purge all stopped integration containers and dangling docker/podman volumes to free up space.
 
 Options:
-  -b, --build       Force rebuild of the container images
-  -h, --help        Show this help message
+  -b, --build       Force clean rebuild of both container images (only applicable to 'up')
+  -h, --help        Show this help message with detailed explanations
+
+Detailed Commands Explanation:
+  * up:
+    Runs the multi-container stack. First, it ensures that the sibling Quasar C++ repository exists.
+    It builds 'quasar.Dockerfile' inside a 'debian:trixie-slim' C++20 standard compiler container and builds the C++ binaries.
+    It then builds Nunki's Svelte and Java code inside a Maven build image.
+    Finally, it spins up the containers inside the shared network 'nunki-network' and executes a 60-second health loop
+    validating that both endpoints started successfully.
+    Equivalent to:
+      1. $COMPOSE_CMD up -d [--build]
+      2. Status verification checking socket status of 'quasar-server' and 'nunki-app'.
+
+  * down:
+    Stops container processes cleanly via SIGTERM signals, removes the bridged network interface 'nunki-network',
+    and releases allocated port numbers.
+    Equivalent to:
+      $COMPOSE_CMD down -v
+
+  * build:
+    Performs compile-stage orchestration inside the containers without running them. Perfect for compiling
+    modified C++ server code or Java classes ahead of launch.
+    Equivalent to:
+      $COMPOSE_CMD build
+
+  * restart:
+    Sends a restart signal to both running containers, allowing rapid reloading of the application state.
+    Equivalent to:
+      $COMPOSE_CMD restart
+
+  * status:
+    Inspects active runtime descriptors showing resource usage, container ids, ports, and internal statuses.
+    Equivalent to:
+      $COMPOSE_CMD ps
+
+  * logs:
+    Enters a streaming mode following both C++ and Java stdout/stderr in real-time, matching service names with color tags.
+    Equivalent to:
+      $COMPOSE_CMD logs -f
+
+  * clean:
+    Utility clean-up routine that prunes all unused networks, containers, and dangling integration volumes.
+    Equivalent to:
+      docker/podman container prune -f && docker/podman volume prune -f
 
 Examples:
-  $(basename "$0") up              # Start servers
-  $(basename "$0") up --build      # Force rebuild and start servers
-  $(basename "$0") down            # Stop and tear down servers
-  $(basename "$0") status          # Verify servers are running
-  $(basename "$0") logs            # View live logs
+  $(basename "$0") up                # Build and boot both servers in background
+  $(basename "$0") up --build        # Force rebuild C++/Java codes and boot
+  $(basename "$0") down              # Shutdown and clean resources
+  $(basename "$0") logs              # Follow live logs stream
+  $(basename "$0") status            # Check container health and port maps
+  $(basename "$0") restart           # Graceful restart of servers
+  $(basename "$0") build             # Recompile container artifacts
+  $(basename "$0") clean             # Deep system clean-up
 EOF
 }
 
@@ -81,10 +139,6 @@ while [[ $# -gt 0 ]]; do
             FORCE_BUILD=true
             shift
             ;;
-        -h|--help)
-            show_help
-            exit 0
-            ;;
         *)
             echo "Unknown option: $1" >&2
             show_help
@@ -92,6 +146,14 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Wrapper function to execute compose in the helpers folder
+run_compose() {
+    (
+        cd "$SCRIPT_DIR"
+        $COMPOSE_CMD "$@"
+    )
+}
 
 case "$COMMAND" in
     "up")
@@ -106,22 +168,15 @@ case "$COMMAND" in
             BUILD_FLAG="--build"
         fi
         
-        # Execute compose in helpers folder to ensure correct relative pathing
-        (
-            cd "$SCRIPT_DIR"
-            $COMPOSE_CMD up -d $BUILD_FLAG
-        )
+        run_compose up -d $BUILD_FLAG
         
         echo "========================================================================"
         echo "Verifying Container Execution..."
         echo "========================================================================"
         
         # Loop for up to 60 seconds checking if containers are running
-        # We can use podman ps or docker ps to check
         SUCCESS=false
         for i in {1..60}; do
-            # Retrieve status using docker inspect / podman inspect
-            # We check containers named 'quasar-server' and 'nunki-app'
             quasar_status=""
             nunki_status=""
             
@@ -165,31 +220,47 @@ case "$COMMAND" in
         
     "down")
         echo "Stopping and tearing down the Integrated Stack..."
-        (
-            cd "$SCRIPT_DIR"
-            $COMPOSE_CMD down -v
-        )
+        run_compose down -v
         echo "Stack stopped and resources cleaned successfully."
+        ;;
+        
+    "build")
+        echo "Building/Rebuilding Integrated Container Images..."
+        run_compose build
+        echo "Image builds completed successfully."
+        ;;
+        
+    "restart")
+        echo "Restarting Integrated Stack containers..."
+        run_compose restart
+        echo "Containers restarted successfully."
         ;;
         
     "status")
         echo "Checking Integrated Stack status..."
-        (
-            cd "$SCRIPT_DIR"
-            $COMPOSE_CMD ps
-        )
+        run_compose ps
         ;;
         
     "logs")
         echo "Streaming logs for the Integrated Stack..."
-        (
-            cd "$SCRIPT_DIR"
-            $COMPOSE_CMD logs -f
-        )
+        run_compose logs -f
+        ;;
+        
+    "clean")
+        echo "Performing deep cleanup of integration containers and volumes..."
+        run_compose down -v --remove-orphans || true
+        if command -v podman >/dev/null 2>&1; then
+            podman container prune -f
+            podman volume prune -f
+        else
+            docker container prune -f
+            docker volume prune -f
+        fi
+        echo "Cleanup completed successfully."
         ;;
         
     *)
-        echo "Unknown command: $COMMAND" >&2
+        echo "Error: Unknown command '$COMMAND'" >&2
         show_help
         exit 1
         ;;
