@@ -1,0 +1,180 @@
+name: Multi-OS Packaging and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Package for ${{ matrix.container }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - container: "debian:bookworm"
+            pkg_type: "deb"
+            suffix: "debian-bookworm"
+          - container: "debian:trixie"
+            pkg_type: "deb"
+            suffix: "debian-trixie"
+          - container: "fedora:latest"
+            pkg_type: "rpm"
+            suffix: "fedora-latest"
+          - container: "archlinux:latest"
+            pkg_type: "arch"
+            suffix: "archlinux-latest"
+
+    container:
+      image: ${{ matrix.container }}
+
+    steps:
+      - name: Pre-install git and core tools (Debian/Fedora)
+        if: "!contains(matrix.container, 'archlinux')"
+        run: |
+          if command -v apt-get > /dev/null; then
+            apt-get update && apt-get install -y git curl sudo
+          elif command -v dnf > /dev/null; then
+            dnf install -y git curl sudo
+          fi
+
+      - name: Pre-install git and core tools (Arch)
+        if: "contains(matrix.container, 'archlinux')"
+        run: |
+          pacman -Sy --noconfirm git curl sudo base-devel
+
+      - name: Checkout Nunki
+        uses: actions/checkout@v4
+        with:
+          path: nunki
+
+      - name: Checkout Quasar
+        uses: actions/checkout@v4
+        with:
+          repository: mlecabellec/quasar
+          path: quasar
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Install specific dependencies for Nunki and Quasar build
+      - name: Install Build Dependencies (Debian)
+        if: "startsWith(matrix.container, 'debian')"
+        run: |
+          apt-get update
+          apt-get install -y ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
+                             libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
+                             libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev \
+                             openjdk-21-jdk maven dpkg-dev
+          # Install Node.js v22
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y nodejs
+
+      - name: Install Build Dependencies (Fedora)
+        if: "startsWith(matrix.container, 'fedora')"
+        run: |
+          dnf install -y gcc-c++ make cmake pkgconf-pkg-config python3 file \
+                         alsa-lib-devel libX11-devel libXrandr-devel libXi-devel \
+                         mesa-libGL-devel mesa-libGLU-devel libXcursor-devel libXinerama-devel \
+                         gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel \
+                         java-21-openjdk-devel maven rpm-build
+          # Install Node.js v22
+          curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
+          dnf install -y nodejs
+
+      - name: Install Build Dependencies (Arch)
+        if: "startsWith(matrix.container, 'archlinux')"
+        run: |
+          pacman -S --needed --noconfirm \
+                         cmake python file \
+                         alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
+                         gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm
+
+      # Build & Package Nunki
+      - name: Build Nunki
+        run: |
+          cd nunki
+          mvn clean package -DskipTests
+          ./helpers/package.sh ${{ matrix.pkg_type }} ../dist-packages
+
+      # Build & Package Quasar
+      - name: Build and Package Quasar
+        run: |
+          cd quasar
+          mkdir -p build-projects
+          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-projects
+          ../nunki/helpers/package-quasar.sh ${{ matrix.pkg_type }} ../dist-packages
+
+      # Generate Dockerfiles for Quasar and Nunki for this distribution
+      - name: Generate Distro Dockerfiles
+        run: |
+          mkdir -p distro-dockerfiles
+          
+          # 1. Generate Nunki Dockerfile
+          if [ "${{ matrix.pkg_type }}" = "deb" ]; then
+            cat << 'EOF' > distro-dockerfiles/Dockerfile.nunki
+FROM ${{ matrix.container }}
+RUN apt-get update && apt-get install -y openjdk-21-jre-headless && rm -rf /var/lib/apt/lists/*
+COPY nunki_*.deb /tmp/
+RUN dpkg -i /tmp/nunki_*.deb || apt-get install -f -y
+EXPOSE 8080
+ENTRYPOINT ["/usr/bin/nunki"]
+EOF
+          elif [ "${{ matrix.pkg_type }}" = "rpm" ]; then
+            cat << 'EOF' > distro-dockerfiles/Dockerfile.nunki
+FROM ${{ matrix.container }}
+RUN dnf install -y java-21-openjdk-headless && dnf clean all
+COPY nunki-*.rpm /tmp/
+RUN dnf localinstall -y /tmp/nunki-*.rpm
+EXPOSE 8080
+ENTRYPOINT ["/usr/bin/nunki"]
+EOF
+          elif [ "${{ matrix.pkg_type }}" = "arch" ]; then
+            cat << 'EOF' > distro-dockerfiles/Dockerfile.nunki
+FROM ${{ matrix.container }}
+COPY nunki-*.pkg.tar.zst /tmp/
+RUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/nunki-*.pkg.tar.zst && pacman -Scc --noconfirm
+EXPOSE 8080
+ENTRYPOINT ["/usr/bin/nunki"]
+EOF
+          fi
+
+          # 2. Generate Quasar Dockerfile
+          if [ "${{ matrix.pkg_type }}" = "deb" ]; then
+            cat << 'EOF' > distro-dockerfiles/Dockerfile.quasar
+FROM ${{ matrix.container }}
+RUN apt-get update && apt-get install -y libssl3 libuuid1 zlib1g && rm -rf /var/lib/apt/lists/*
+COPY quasar_*.deb /tmp/
+RUN dpkg -i /tmp/quasar_*.deb || apt-get install -f -y
+EXPOSE 4840
+ENTRYPOINT ["/usr/bin/quasar_server"]
+EOF
+          elif [ "${{ matrix.pkg_type }}" = "rpm" ]; then
+            cat << 'EOF' > distro-dockerfiles/Dockerfile.quasar
+FROM ${{ matrix.container }}
+RUN dnf install -y openssl zlib libuuid && dnf clean all
+COPY quasar-*.rpm /tmp/
+RUN dnf localinstall -y /tmp/quasar-*.rpm
+EXPOSE 4840
+ENTRYPOINT ["/usr/bin/quasar_server"]
+EOF
+          elif [ "${{ matrix.pkg_type }}" = "arch" ]; then
+            cat << 'EOF' > distro-dockerfiles/Dockerfile.quasar
+FROM ${{ matrix.container }}
+COPY quasar-*.pkg.tar.zst /tmp/
+RUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/quasar-*.pkg.tar.zst && pacman -Scc --noconfirm
+EXPOSE 4840
+ENTRYPOINT ["/usr/bin/quasar_server"]
+EOF
+          fi
+          
+          # Copy generated Dockerfiles to target distribution packages
+          cp distro-dockerfiles/Dockerfile.nunki dist-packages/
+          cp distro-dockerfiles/Dockerfile.quasar dist-packages/
+
+      - name: Upload Linux Packages & Dockerfiles
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.suffix }}
+          path: dist-packages/*
