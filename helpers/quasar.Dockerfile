@@ -31,10 +31,8 @@ RUN g++ -O3 -std=c++20 /quasar/quasar_server.cpp -o /quasar/build/quasar_server 
     -I /quasar/cmake-projects/third-party/open62541/include \
     -I /quasar/cmake-projects/third-party/open62541/plugins/include \
     -I /quasar/cmake-projects/third-party/open62541/arch \
-    -L /quasar/build/cmake-projects/opcua \
-    -L /quasar/build/cmake-projects/named \
-    -L /quasar/build/cmake-projects/coretypes \
-    -L /quasar/build/cmake-projects/third-party/open62541 \
+    -L /quasar/build/lib \
+    -L /quasar/build/bin \
     -lquasar_opcua -lquasar_named -lquasar_coretypes -lopen62541 -lpthread
 
 # Run stage
@@ -45,10 +43,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY --from=build /quasar/build/quasar_server .
-COPY --from=build /quasar/build/cmake-projects/opcua/libquasar_opcua.so /usr/lib/
-COPY --from=build /quasar/build/cmake-projects/named/libquasar_named.so /usr/lib/
-COPY --from=build /quasar/build/cmake-projects/coretypes/libquasar_coretypes.so /usr/lib/
-COPY --from=build /quasar/build/cmake-projects/third-party/open62541/libopen62541.so /usr/lib/
+COPY --from=build /quasar/build/lib/libquasar_opcua.so /usr/lib/
+COPY --from=build /quasar/build/lib/libquasar_named.so /usr/lib/
+COPY --from=build /quasar/build/lib/libquasar_coretypes.so /usr/lib/
 
 EXPOSE 4840
 ENTRYPOINT ["./quasar_server"]
