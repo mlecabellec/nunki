@@ -17,5 +17,10 @@
     "svelte-check": "^4.4.8",
     "typescript": "~6.0.2",
     "vite": "^8.0.12"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.18.0",
+    "@stomp/stompjs": "^7.3.0",
+    "lucide-svelte": "^1.0.1"
   }
 }
