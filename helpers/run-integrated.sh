@@ -226,7 +226,12 @@ case "$COMMAND" in
         
     "build")
         echo "Building/Rebuilding Integrated Container Images..."
-        run_compose build
+        export BUILDKIT_PROGRESS=plain
+        if [[ "$COMPOSE_CMD" == *"docker"* ]]; then
+            run_compose build --progress=plain
+        else
+            run_compose build
+        fi
         echo "Image builds completed successfully."
         ;;
         

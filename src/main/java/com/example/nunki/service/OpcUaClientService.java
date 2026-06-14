@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
  * Service to connect to a Quasar OPC UA server.
  * [TSK-20260519-001] Implementation of OPC UA Client for Quasar integration.
  */
-@Service
+// @Service
 public class OpcUaClientService {
 
     private static final Logger logger = LoggerFactory.getLogger(OpcUaClientService.class);

@@ -15,6 +15,8 @@ import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
 import org.eclipse.milo.opcua.stack.core.types.builtin.StatusCode;
 import org.eclipse.milo.opcua.stack.core.types.builtin.Variant;
 
+import com.example.nunki.opcua.dto.OpcUaNodeDto;
+
 /**
  * Public façade for the OPC‑UA client. All operations are asynchronous and return
  * {@link CompletableFuture} so they can be composed or awaited as needed.
@@ -43,6 +45,9 @@ public interface OpcUaClientApi {
 
     /** Unsubscribes a previously created subscription. */
     CompletableFuture<Void> unsubscribe(SubscriptionHandle handle);
+
+    /** Browses the address space recursively starting from a root node. */
+    CompletableFuture<OpcUaNodeDto> browseTree(NodeId rootNodeId);
 
     /** Simple holder for method call results. */
     record MethodResult(List<Variant> outputArguments, StatusCode status) {}

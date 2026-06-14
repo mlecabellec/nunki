@@ -2,7 +2,7 @@ FROM debian:trixie-slim AS build
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential cmake git pkg-config python3 file \
+    build-essential cmake git pkg-config python3 file ccache \
     autoconf automake libtool \
     libasound2-dev libx11-dev libxrandr-dev libxi-dev \
     libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
@@ -17,8 +17,12 @@ COPY quasar/ .
 # RUN git submodule update --init --recursive
 
 # Build quasar
-RUN mkdir build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release && \
+RUN --mount=type=cache,target=/root/.cache/ccache \
+    mkdir -p build && cd build && \
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DCMAKE_VERBOSE_MAKEFILE=ON \
+             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && \
     make -j$(nproc) quasar_opcua quasar_named quasar_coretypes open62541
 
 # Compile the standalone server (from nunki/helpers)

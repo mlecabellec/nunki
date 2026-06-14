@@ -79,7 +79,13 @@ public class ConnectionManager {
             OpcUaClient opcUaClient = OpcUaClient.create(
                 properties.getEndpointUrl(),
                 endpoints -> endpoints.stream()
-                    .filter(e -> e.getSecurityPolicyUri().equals(SecurityPolicy.Basic256Sha256.getUri()))
+                    .filter(e -> e.getSecurityPolicyUri().equals(SecurityPolicy.Basic256Sha256.getUri()) ||
+                                 e.getSecurityPolicyUri().equals(SecurityPolicy.None.getUri()))
+                    .sorted((e1, e2) -> {
+                        boolean isE1Secure = e1.getSecurityPolicyUri().equals(SecurityPolicy.Basic256Sha256.getUri());
+                        boolean isE2Secure = e2.getSecurityPolicyUri().equals(SecurityPolicy.Basic256Sha256.getUri());
+                        return Boolean.compare(isE2Secure, isE1Secure);
+                    })
                     .findFirst(),
                 configBuilder -> {
                     configBuilder

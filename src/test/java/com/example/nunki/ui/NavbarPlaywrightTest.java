@@ -4,6 +4,13 @@ import com.microsoft.playwright.*;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import com.example.nunki.opcua.api.OpcUaClientApi;
+import com.example.nunki.opcua.dto.OpcUaNodeDto;
+import org.mockito.Mockito;
+import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
+import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -13,6 +20,9 @@ public class NavbarPlaywrightTest {
 
     @LocalServerPort
     private int port;
+
+    @MockBean
+    private OpcUaClientApi opcUaClient;
 
     private Playwright playwright;
     private Browser browser;
@@ -34,6 +44,21 @@ public class NavbarPlaywrightTest {
 
     @BeforeEach
     void createContextAndPage() {
+        OpcUaNodeDto mockNode = new OpcUaNodeDto(
+            "ns=1;s=Data",
+            "Data",
+            "Object",
+            "",
+            Collections.singletonList(
+                new OpcUaNodeDto("ns=1;s=Data/MySwitch", "MySwitch", "Variable", "false", Collections.emptyList())
+            )
+        );
+
+        Mockito.when(opcUaClient.connect())
+            .thenReturn(CompletableFuture.completedFuture(null));
+        Mockito.when(opcUaClient.browseTree(org.mockito.ArgumentMatchers.any(NodeId.class)))
+            .thenReturn(CompletableFuture.completedFuture(mockNode));
+
         context = browser.newContext(new Browser.NewContextOptions().setViewportSize(1920, 1080));
         page = context.newPage();
     }
@@ -118,5 +143,32 @@ public class NavbarPlaywrightTest {
         logItem.waitFor(new Locator.WaitForOptions().setTimeout(10000));
 
         assertTrue(logItem.isVisible(), "Sent ping message should appear in Response Logs");
+    }
+    @Test
+    public void testOpcUaTreeView() {
+        String url = "http://localhost:" + port;
+        page.navigate(url);
+
+        // Open Workbenches dropdown first
+        page.click("button:has-text('Workbenches')");
+        page.waitForTimeout(200);
+
+        // Open Values submenu and select Tree view
+        page.click("button:has-text('Values')");
+        page.waitForTimeout(200);
+        page.click("button:has-text('Tree view')");
+
+        // Verify that the tree header is visible
+        Locator header = page.locator("h1:has-text('OPC-UA Address Space')");
+        assertTrue(header.isVisible(), "Tree view header should be visible");
+
+        // Verify the mock node "Data" is rendered in the tree display
+        Locator dataNodeName = page.locator(".tree-node .name:has-text('Data')");
+        dataNodeName.waitFor(new Locator.WaitForOptions().setTimeout(5000));
+        assertTrue(dataNodeName.isVisible(), "Data folder should be visible in tree");
+
+        // Verify child node "MySwitch" is rendered
+        Locator switchNodeName = page.locator(".tree-node .name:has-text('MySwitch')");
+        assertTrue(switchNodeName.isVisible(), "MySwitch variable should be visible in tree");
     }
 }

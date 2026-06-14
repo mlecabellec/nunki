@@ -10,10 +10,11 @@
    */
 
   import { onMount, onDestroy } from 'svelte';
-  import { wsManager } from './lib/websocket.svelte';
+  import { wsManager, getApiUrl } from './lib/websocket.svelte';
   import Navbar from './lib/Navbar.svelte';
   import TimeSeriesChart from './lib/TimeSeriesChart.svelte';
   import SynopticView from './lib/SynopticView.svelte';
+  import OpcUaTreeNode from './lib/OpcUaTreeNode.svelte';
   
   // Lucide Icons
   import { 
@@ -31,6 +32,36 @@
   let loginUsername = $state('admin');
   let loginPassword = $state('admin');
   let isLoggedIn = $state(true);
+
+  // OPC-UA Tree state and fetching logic
+  interface OpcUaNode {
+    nodeId: string;
+    name: string;
+    nodeClass: string;
+    value: string;
+    children: OpcUaNode[];
+  }
+  
+  let opcUaTree = $state<OpcUaNode | null>(null);
+  let isFetchingTree = $state(false);
+  let treeFetchError = $state<string | null>(null);
+
+  async function fetchOpcUaTree() {
+    isFetchingTree = true;
+    treeFetchError = null;
+    try {
+      const response = await fetch(getApiUrl('/api/opcua/tree'));
+      if (!response.ok) {
+        throw new Error('Server returned ' + response.status);
+      }
+      opcUaTree = await response.json();
+    } catch (e: any) {
+      console.error('Error fetching OPC-UA tree:', e);
+      treeFetchError = e.message || 'Failed to fetch OPC-UA tree';
+    } finally {
+      isFetchingTree = false;
+    }
+  }
 
   // Search input state
   let searchQuery = $state('');
@@ -75,6 +106,7 @@ end`);
   // Connect on mount
   onMount(() => {
     wsManager.connect();
+    fetchOpcUaTree();
   });
 
   // Cleanup on destroy
@@ -129,6 +161,9 @@ end`);
       userAction = tab;
     } else {
       activeTab = tab;
+      if (tab === 'tree') {
+        fetchOpcUaTree();
+      }
     }
   }
 
@@ -361,35 +396,26 @@ end`);
         <p>Interactive view of active nodes, folders and attributes</p>
       </div>
       <div class="glass-card full-card">
-        <div class="tree-mockup">
-          <div class="tree-item folder">
-            <span class="icon">📁</span> <span class="name">Root</span>
-            <div class="tree-children">
-              <div class="tree-item folder">
-                <span class="icon">📁</span> <span class="name">Objects</span>
-                <div class="tree-children">
-                  <div class="tree-item folder">
-                    <span class="icon">📁</span> <span class="name">Server</span>
-                  </div>
-                  <div class="tree-item folder">
-                    <span class="icon">📁</span> <span class="name">Data</span>
-                    <div class="tree-children">
-                      <div class="tree-item variable">
-                        <span class="icon">🔢</span> <span class="name">MyInt</span> <span class="value">[Int32: {nodeValues.find(n => n.name === 'MyInt')?.value || 42}]</span> <span class="badge read">Read</span> <span class="badge write">Write</span>
-                      </div>
-                      <div class="tree-item variable">
-                        <span class="icon">📈</span> <span class="name">MyFloat</span> <span class="value">[Float: 84.15]</span> <span class="badge read">Read</span>
-                      </div>
-                      <div class="tree-item variable">
-                        <span class="icon">🔌</span> <span class="name">MySwitch</span> <span class="value">[Boolean: True]</span> <span class="badge read">Read</span> <span class="badge write">Write</span> <span class="badge subscribe">Subscribed</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+        <div class="tree-controls" style="margin-bottom: 16px; display: flex; gap: 8px; align-items: center;">
+          <button class="btn-action" onclick={fetchOpcUaTree} disabled={isFetchingTree} style="padding: 6px 16px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent-bg); color: var(--accent); transition: all 0.2s;">
+            {isFetchingTree ? 'Refreshing...' : 'Refresh Address Space'}
+          </button>
+          {#if treeFetchError}
+            <span style="color: #ef4444; font-size: 14px;">Error: {treeFetchError}</span>
+          {/if}
         </div>
+
+        {#if isFetchingTree && !opcUaTree}
+          <p style="text-align: center; padding: 20px; color: var(--text);">Loading address space from OPC-UA server...</p>
+        {:else if opcUaTree}
+          <div class="tree-display" style="padding: 10px; max-height: 70vh; overflow-y: auto;">
+            <OpcUaTreeNode node={opcUaTree} />
+          </div>
+        {:else}
+          <p style="text-align: center; padding: 20px; color: #ef4444;">
+            Failed to connect to OPC-UA backend. {treeFetchError || 'Check that the Quasar server is running.'}
+          </p>
+        {/if}
       </div>
 
     {:else if activeTab === 'automation-lua'}
