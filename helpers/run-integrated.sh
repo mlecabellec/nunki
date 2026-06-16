@@ -35,6 +35,17 @@ if [ -z "$COMPOSE_CMD" ]; then
     exit 1
 fi
 
+# If using Podman backend via docker/docker-compose, make sure podman.socket is running
+if [[ "$COMPOSE_CMD" == *"docker"* ]] && command -v podman >/dev/null 2>&1; then
+    if command -v systemctl >/dev/null 2>&1 && systemctl --user list-unit-files podman.socket >/dev/null 2>&1; then
+        if ! systemctl --user is-active --quiet podman.socket >/dev/null 2>&1; then
+            echo "Info: Podman backend detected via '$COMPOSE_CMD' but 'podman.socket' is not running." >&2
+            echo "Starting podman.socket user service..." >&2
+            systemctl --user start podman.socket || echo "Warning: Failed to start podman.socket." >&2
+        fi
+    fi
+fi
+
 show_help() {
     cat << EOF
 Usage: $(basename "$0") <command> [options]
