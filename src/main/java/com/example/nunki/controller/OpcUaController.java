@@ -62,15 +62,15 @@ public class OpcUaController {
         logger.info("[OPC-UA REST] Fetching OPC-UA node tree starting from ObjectsFolder");
         return opcUaClient.browseTree(org.eclipse.milo.opcua.stack.core.Identifiers.ObjectsFolder)
             .thenApply(tree -> {
-                java.util.Optional<OpcUaNodeDto> dataNode = findNodeByName(tree, "Data");
-                return ResponseEntity.ok(dataNode.orElse(tree));
+                java.util.Optional<OpcUaNodeDto> rootNode = findNodeByName(tree, "Root");
+                return ResponseEntity.ok(rootNode.orElse(tree));
             })
             .exceptionally(ex -> {
                 logger.error("[OPC-UA REST] Failed to browse OPC-UA tree: {}", ex.getMessage());
                 // Return an empty node Dto to avoid passing null
                 OpcUaNodeDto emptyDto = new OpcUaNodeDto(
-                    "ns=1;s=Data",
-                    "Data",
+                    "ns=1;s=Root",
+                    "Root",
                     "Object",
                     "",
                     java.util.Collections.emptyList()

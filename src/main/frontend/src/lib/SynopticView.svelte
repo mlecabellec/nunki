@@ -16,52 +16,56 @@
    * - TSK-00023.1: SVG & Charting Prerequisites / Native Synoptic SVG (reusable and lightweight SVG).
    */
 
-  // --- Dynamic Simulator State Variables ---
+  import { wsManager } from './websocket.svelte';
+
+  // --- Dynamic Simulator State Variables (Derived from real OPC-UA node states) ---
   // Valve State (true = OPEN, fluid drains out; false = CLOSED, fluid is blocked)
-  let valveOpen = $state(false);
+  let valveOpen = $derived(
+    wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.value === 'true' ||
+    wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.value === 'True'
+  );
   
   // Storage Tank Water Level (ranges from 0% [empty] to 100% [maximum capacity])
-  let tankLevel = $state(45);
+  let tankLevel = $derived(
+    wsManager.opcUaUpdates['ns=1;s=Data/TankLevel']?.value !== undefined
+      ? parseFloat(wsManager.opcUaUpdates['ns=1;s=Data/TankLevel'].value)
+      : 45
+  );
   
   // Inlet Feed Pump State (true = RUNNING, pushes fluid in; false = STOPPED)
-  let pumpRunning = $state(false);
+  let pumpRunning = $derived(
+    wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.value === 'true' ||
+    wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.value === 'True'
+  );
 
   // Dash displacement offset (in pixels) for fluid movement stroke animations
   let flowOffset = $state(0);
 
+  // Dispatch real OPC-UA write actions via REST endpoints
+  async function togglePump() {
+    const nextState = !pumpRunning;
+    await wsManager.writeOpcUaValue('ns=1;s=Data/PumpRunning', String(nextState), 'Boolean');
+  }
+
+  async function toggleValve() {
+    const nextState = !valveOpen;
+    await wsManager.writeOpcUaValue('ns=1;s=Data/MySwitch', String(nextState), 'Boolean');
+  }
+
+  async function handleSliderChange(valStr: string) {
+    await wsManager.writeOpcUaValue('ns=1;s=Data/TankLevel', valStr, 'Double');
+  }
+
   /**
-   * Animation & Flow Simulation Loop.
-   * Leverages Svelte 5 `$effect` to handle side effects.
-   * Monitors changes in `pumpRunning` and `valveOpen` states:
-   * 
-   * Scenario A: Feed Pump is RUNNING and Drain Valve is OPEN.
-   * - Liquid dashes flow at velocity: `flowOffset = (flowOffset + 2) % 20` every 50ms.
-   * - Tank level slowly accumulates: `tankLevel += 0.5` up to a safety ceiling of 95%.
-   * 
-   * Scenario B: Feed Pump is STOPPED and Drain Valve is OPEN.
-   * - Liquid drains out gravitational force: `tankLevel -= 0.3` down to a floor of 10% (retaining a dead volume).
-   * - Output pipe shows flow animation.
-   * 
-   * Scenario C: All other combinations.
-   * - Flow is static. Interval timer is cleared down.
+   * Flow Offset Animation Loop.
+   * Shift the offset of pipeline dashed lines if flow is active.
    */
   $effect(() => {
     let intervalId: any;
-    if (pumpRunning && valveOpen) {
-      // Inflow animation loop
+    if ((pumpRunning && valveOpen) || (valveOpen && tankLevel > 5)) {
       intervalId = setInterval(() => {
         flowOffset = (flowOffset + 2) % 20; // Loops dash offsets within a 20px window
-        if (tankLevel < 95) {
-          tankLevel += 0.5;
-        }
       }, 50);
-    } else if (!pumpRunning && tankLevel > 10) {
-      // Gravitational draining loop (only active if drain valve is open)
-      if (valveOpen) {
-        intervalId = setInterval(() => {
-          tankLevel -= 0.3;
-        }, 100);
-      }
     }
     // Svelte 5 cleanup block: destroys intervals on state transitions or component unmount
     return () => clearInterval(intervalId);
@@ -72,19 +76,19 @@
   <!-- Top Simulator Control Deck -->
   <div class="controls">
     <!-- Toggle Feed Pump State -->
-    <button onclick={() => pumpRunning = !pumpRunning} class:active={pumpRunning}>
+    <button onclick={togglePump} class:active={pumpRunning}>
       {pumpRunning ? 'Stop Pump' : 'Start Pump'}
     </button>
     
     <!-- Toggle Drain Valve State -->
-    <button onclick={() => valveOpen = !valveOpen} class:active={valveOpen}>
+    <button onclick={toggleValve} class:active={valveOpen}>
       {valveOpen ? 'Close Valve' : 'Open Valve'}
     </button>
     
     <!-- Manual Level Override Slider -->
     <div class="level-control">
       <label for="tank-level-slider">Tank Level: {tankLevel.toFixed(0)}%</label>
-      <input id="tank-level-slider" type="range" min="0" max="100" bind:value={tankLevel} />
+      <input id="tank-level-slider" type="range" min="0" max="100" value={tankLevel} oninput={(e) => handleSliderChange(e.currentTarget.value)} />
     </div>
   </div>
 
@@ -154,8 +158,8 @@
            ========================================== -->
       <!-- Bounded key handlers and accessibility traits map standard keyboard interactions -->
       <g transform="translate(550, 300)" 
-         onclick={() => valveOpen = !valveOpen} 
-         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { valveOpen = !valveOpen; e.preventDefault(); } }}
+         onclick={toggleValve} 
+         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { toggleValve(); e.preventDefault(); } }}
          role="button"
          tabindex="0"
          aria-label="Drain Valve Toggle"

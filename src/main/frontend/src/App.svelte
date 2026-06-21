@@ -122,13 +122,8 @@ end`);
   }
   
   // Local reactive cache array plotted on the TimeSeries SVG chart
-  let timeSeriesData = $state<ChartData[]>([
-    { timestamp: Date.now() - 50000, value: 35 },
-    { timestamp: Date.now() - 40000, value: 45 },
-    { timestamp: Date.now() - 30000, value: 20 },
-    { timestamp: Date.now() - 20000, value: 60 },
-    { timestamp: Date.now() - 10000, value: 55 },
-  ]);
+  // Local reactive cache array plotted on the TimeSeries SVG chart
+  let timeSeriesData = $state<ChartData[]>([]);
 
   // Schema interface representing simulated table nodes
   interface NodeValue {
@@ -140,13 +135,70 @@ end`);
     ts: string;
   }
 
-  // Hardcoded simulated registers populated in the values dashboard views
-  let nodeValues = $state<NodeValue[]>([
-    { id: 'ns=1;s=Data/MyInt', name: 'MyInt', value: 42, type: 'Int32', status: 'Good', ts: new Date().toLocaleTimeString() },
-    { id: 'ns=1;s=Data/MyFloat', name: 'MyFloat', value: 84.15, type: 'Float', status: 'Good', ts: new Date().toLocaleTimeString() },
-    { id: 'ns=1;s=Data/MySwitch', name: 'MySwitch', value: 'True', type: 'Boolean', status: 'Good', ts: new Date().toLocaleTimeString() },
-    { id: 'ns=1;s=Server/ServerStatus', name: 'ServerStatus', value: 'Running', type: 'String', status: 'Good', ts: new Date().toLocaleTimeString() },
-    { id: 'ns=1;s=Data/SystemLoad', name: 'SystemLoad', value: 14.5, type: 'Double', status: 'Good', ts: new Date().toLocaleTimeString() },
+  // Derived registers populated reactively from active OPC-UA backend endpoints
+  let nodeValues = $derived<NodeValue[]>([
+    {
+      id: 'ns=1;s=Data/MyInt',
+      name: 'MyInt',
+      value: wsManager.opcUaUpdates['ns=1;s=Data/MyInt']?.value ?? '42',
+      type: 'Int32',
+      status: wsManager.connected ? 'Good' : 'Offline',
+      ts: wsManager.opcUaUpdates['ns=1;s=Data/MyInt']?.timestamp 
+        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/MyInt'].timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString()
+    },
+    {
+      id: 'ns=1;s=Data/MySwitch',
+      name: 'MySwitch',
+      value: wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.value ?? 'False',
+      type: 'Boolean',
+      status: wsManager.connected ? 'Good' : 'Offline',
+      ts: wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.timestamp 
+        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/MySwitch'].timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString()
+    },
+    {
+      id: 'ns=1;s=Data/PumpRunning',
+      name: 'PumpRunning',
+      value: wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.value ?? 'False',
+      type: 'Boolean',
+      status: wsManager.connected ? 'Good' : 'Offline',
+      ts: wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.timestamp 
+        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning'].timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString()
+    },
+    {
+      id: 'ns=1;s=Data/TankLevel',
+      name: 'TankLevel',
+      value: wsManager.opcUaUpdates['ns=1;s=Data/TankLevel']?.value !== undefined
+        ? parseFloat(wsManager.opcUaUpdates['ns=1;s=Data/TankLevel'].value).toFixed(1)
+        : '45.0',
+      type: 'Double',
+      status: wsManager.connected ? 'Good' : 'Offline',
+      ts: wsManager.opcUaUpdates['ns=1;s=Data/TankLevel']?.timestamp 
+        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/TankLevel'].timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString()
+    },
+    {
+      id: 'ns=1;s=CounterControl/CounterValue',
+      name: 'CounterValue',
+      value: wsManager.opcUaUpdates['ns=1;s=CounterControl/CounterValue']?.value ?? '0',
+      type: 'Int32',
+      status: wsManager.connected ? 'Good' : 'Offline',
+      ts: wsManager.opcUaUpdates['ns=1;s=CounterControl/CounterValue']?.timestamp 
+        ? new Date(wsManager.opcUaUpdates['ns=1;s=CounterControl/CounterValue'].timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString()
+    },
+    {
+      id: 'ns=1;s=FastCounters/Counter_1Hz',
+      name: 'Counter_1Hz',
+      value: wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz']?.value ?? '0',
+      type: 'Int32',
+      status: wsManager.connected ? 'Good' : 'Offline',
+      ts: wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz']?.timestamp 
+        ? new Date(wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz'].timestamp).toLocaleTimeString()
+        : new Date().toLocaleTimeString()
+    }
   ]);
 
   // Connect STOMP websockets on layout mount
@@ -162,41 +214,18 @@ end`);
   });
 
   /**
-   * Svelte 5 Effect block linking incoming socket pings with the chart graph.
-   * Feeds the raw values into chart coordinates buffer and simulates active system loads.
+   * Svelte 5 Effect block plotting live Counter_1Hz updates onto TimeSeries graph.
    */
   $effect(() => {
-    const pongs = wsManager.pongs;
-    if (pongs.length > 0) {
-      const latestPong = pongs[0];
-      const exists = timeSeriesData.some(d => d.timestamp === latestPong.timestamp);
-      if (!exists) {
-        // Pre-calculate randomized values to feed the graph
-        const lastVal = timeSeriesData.length > 0 ? timeSeriesData[timeSeriesData.length - 1].value : 50;
-        const change = (Math.random() - 0.5) * 20;
-        const newVal = Math.max(10, Math.min(95, lastVal + change));
-        
-        // Append entry and limit buffer to last 20 coordinates
-        timeSeriesData = [...timeSeriesData, {
-          timestamp: latestPong.timestamp,
-          value: parseFloat(newVal.toFixed(1))
-        }].slice(-20);
-
-        // Update local mock registers dynamically on socket updates
-        const randomValue = Math.floor(Math.random() * 100);
-        nodeValues = nodeValues.map(node => {
-          if (node.name === 'MyInt') {
-            return { ...node, value: randomValue, ts: new Date().toLocaleTimeString() };
-          }
-          if (node.name === 'SystemLoad') {
-            // FIX: Safely assert node.value is a number to fix compiler errors
-            const currentVal = typeof node.value === 'number' ? node.value : parseFloat(node.value as string);
-            const loadChange = (Math.random() - 0.5) * 5;
-            const newLoad = Math.max(5, Math.min(95, currentVal + loadChange));
-            return { ...node, value: parseFloat(newLoad.toFixed(1)), ts: new Date().toLocaleTimeString() };
-          }
-          return node;
-        });
+    const update = wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz'];
+    if (update) {
+      const timestamp = update.timestamp;
+      const value = parseFloat(update.value);
+      if (!isNaN(value)) {
+        const exists = timeSeriesData.some(d => d.timestamp === timestamp);
+        if (!exists) {
+          timeSeriesData = [...timeSeriesData, { timestamp, value }].slice(-20);
+        }
       }
     }
   });

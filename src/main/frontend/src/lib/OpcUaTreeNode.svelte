@@ -34,8 +34,8 @@
   // --- LOCAL Runes STATE PROPERTIES ---
   // ==========================================
   
-  // Controls collapsible panel expansion status (default: true [expanded])
-  let isOpen = $state(true);
+  // Controls collapsible panel expansion status (default: false [collapsed])
+  let isOpen = $state(false);
   
   // Toggles inline edit mode editor inputs (default: false [read-only display])
   let isEditing = $state(false);

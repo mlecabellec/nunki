@@ -77,6 +77,10 @@ using namespace quasar::opcua;
 // ---------------------------------------------------------------------------
 static volatile bool g_running = true; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+static std::shared_ptr<NamedBoolean> g_pumpRunning = nullptr;
+static std::shared_ptr<NamedBoolean> g_valveOpen = nullptr;
+static std::shared_ptr<NamedFloatingPoint<double>> g_tankLevel = nullptr;
+
 /**
  * @brief POSIX signal handler for graceful shutdown.
  *
@@ -449,6 +453,11 @@ static void buildLegacyData(std::shared_ptr<NamedObject> root) {
     // Mutable boolean flag – toggled by the ToggleSwitch method below.
     std::shared_ptr<NamedBoolean> mySwitch =
         NamedBoolean::create("MySwitch", false, data);
+    g_valveOpen = mySwitch;
+
+    // PumpRunning and TankLevel to simulate process state
+    g_pumpRunning = NamedBoolean::create("PumpRunning", false, data);
+    g_tankLevel = NamedFloatingPoint<double>::create("TankLevel", 45.0, data);
 
     // ToggleSwitch: flips MySwitch and returns the new state as a string.
     NamedMethod::create(
@@ -465,7 +474,7 @@ static void buildLegacyData(std::shared_ptr<NamedObject> root) {
         data);
 
     std::cout << "[quasar_server] Legacy Data branch ready "
-              << "(MyInt / MySwitch / ToggleSwitch).\n";
+              << "(MyInt / MySwitch / ToggleSwitch / PumpRunning / TankLevel).\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -524,7 +533,8 @@ static void installRunWrapper(
         [oldRun,
          startupTime,
          warmupDelay,
-         counters = std::move(counters)](
+         counters = std::move(counters),
+         lastSimTick = startupTime + warmupDelay](
             std::shared_ptr<NamedObject> /*owner*/,
             std::shared_ptr<NamedObject> /*args*/) mutable
             -> std::shared_ptr<NamedObject>
@@ -552,6 +562,27 @@ static void installRunWrapper(
                         if (now - cfg.lastTick > cfg.interval) {
                             cfg.lastTick = now;
                         }
+                    }
+                }
+
+                // Physical Process Mimic Simulation
+                if (now - lastSimTick >= std::chrono::milliseconds(100)) {
+                    double dt = std::chrono::duration<double>(now - lastSimTick).count();
+                    lastSimTick = now;
+
+                    if (g_pumpRunning && g_valveOpen && g_tankLevel) {
+                        bool pumpOn = g_pumpRunning->booleanValue();
+                        bool valveOn = g_valveOpen->booleanValue();
+                        double currentLevel = g_tankLevel->value();
+
+                        double inflow = pumpOn ? 8.0 : 0.0;
+                        double outflow = valveOn ? 5.0 : 0.0;
+
+                        double newLevel = currentLevel + (inflow - outflow) * dt;
+                        if (newLevel < 0.0) newLevel = 0.0;
+                        if (newLevel > 100.0) newLevel = 100.0;
+
+                        g_tankLevel->setValue(newLevel);
                     }
                 }
             }
