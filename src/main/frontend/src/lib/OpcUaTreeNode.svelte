@@ -28,14 +28,14 @@
   }
 
   // Define component props using Svelte 5 `$props` rune
-  let { node } = $props<{ node: OpcUaNode }>();
+  let { node, parentId = '' } = $props<{ node: OpcUaNode; parentId?: string }>();
 
   // ==========================================
   // --- LOCAL Runes STATE PROPERTIES ---
   // ==========================================
   
-  // Controls collapsible panel expansion status (default: false [collapsed])
-  let isOpen = $state(false);
+  // Controls collapsible panel expansion status (default: true [expanded])
+  let isOpen = $state(true);
   
   // Toggles inline edit mode editor inputs (default: false [read-only display])
   let isEditing = $state(false);
@@ -138,20 +138,21 @@
   }
 
   /**
-   * Dispatches REST Method invocation calls.
-   * Infers parent object IDs by splitting path delimiters.
+   * Dispatches REST Method invocation calls using dynamically resolved parents.
    */
   async function handleInvoke() {
     isInvoking = true;
     invokeResult = null;
-    let objectId = 'ns=1;s=Data';
-    if (node.nodeId.includes('/')) {
-      objectId = node.nodeId.substring(0, node.nodeId.lastIndexOf('/'));
-    }
-    const response = await wsManager.invokeOpcUaMethod(objectId, node.nodeId, []);
+    const objectId = parentId || node.nodeId;
+    const response = await wsManager.invokeOpcUaMethod(objectId, node.nodeId, ["null"]);
     isInvoking = false;
     if (response.success) {
-      invokeResult = response.result || 'Success';
+      try {
+        const parsed = JSON.parse(response.result);
+        invokeResult = parsed.value !== undefined ? String(parsed.value) : 'Success';
+      } catch (e) {
+        invokeResult = response.result || 'Success';
+      }
     } else {
       invokeResult = 'Failed';
     }
@@ -220,7 +221,7 @@
   {#if node.nodeClass === 'Object' && isOpen && node.children && node.children.length > 0}
     <div class="node-children">
       {#each node.children as child}
-        <OpcUaTreeNode node={child} />
+        <OpcUaTreeNode node={child} parentId={node.nodeId} />
       {/each}
     </div>
   {/if}

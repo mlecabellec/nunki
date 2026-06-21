@@ -68,6 +68,50 @@
   // Captures and displays OPC-UA tree connection error messages
   let treeFetchError = $state<string | null>(null);
 
+  // Finds a NodeId by its path from the root, e.g., "Data/MyInt"
+  function resolveNodeIdByPath(node: OpcUaNode | null, path: string): string | null {
+    if (!node) return null;
+    const segments = path.split('/');
+    let current: OpcUaNode = node;
+    
+    for (const segment of segments) {
+      let found: OpcUaNode | null = null;
+      if (current.children) {
+        for (const child of current.children) {
+          if (child.name === segment) {
+            found = child;
+            break;
+          }
+        }
+      }
+      if (!found) return null;
+      current = found;
+    }
+    return current.nodeId;
+  }
+
+  // Dictionary mapping paths to resolved numeric NodeIds
+  let pathNodeIds = $derived.by(() => {
+    const dict: Record<string, string> = {};
+    if (opcUaTree) {
+      const paths = [
+        'Data/MyInt',
+        'Data/MySwitch',
+        'Data/PumpRunning',
+        'Data/TankLevel',
+        'CounterControl/CounterValue',
+        'FastCounters/Counter_1Hz'
+      ];
+      for (const p of paths) {
+        const id = resolveNodeIdByPath(opcUaTree, p);
+        if (id) {
+          dict[p] = id;
+        }
+      }
+    }
+    return dict;
+  });
+
   /**
    * Dispatches GET request to fetch remote OPC-UA address space node hierarchies.
    */
@@ -138,65 +182,75 @@ end`);
   // Derived registers populated reactively from active OPC-UA backend endpoints
   let nodeValues = $derived<NodeValue[]>([
     {
-      id: 'ns=1;s=Data/MyInt',
+      id: pathNodeIds['Data/MyInt'] ?? 'ns=0;i=unknown',
       name: 'MyInt',
-      value: wsManager.opcUaUpdates['ns=1;s=Data/MyInt']?.value ?? '42',
+      value: pathNodeIds['Data/MyInt'] && wsManager.opcUaUpdates[pathNodeIds['Data/MyInt']]?.value !== undefined
+        ? wsManager.opcUaUpdates[pathNodeIds['Data/MyInt']].value
+        : '42',
       type: 'Int32',
-      status: wsManager.connected ? 'Good' : 'Offline',
-      ts: wsManager.opcUaUpdates['ns=1;s=Data/MyInt']?.timestamp 
-        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/MyInt'].timestamp).toLocaleTimeString()
+      status: wsManager.connected && pathNodeIds['Data/MyInt'] ? 'Good' : 'Offline',
+      ts: pathNodeIds['Data/MyInt'] && wsManager.opcUaUpdates[pathNodeIds['Data/MyInt']]?.timestamp 
+        ? new Date(wsManager.opcUaUpdates[pathNodeIds['Data/MyInt']].timestamp).toLocaleTimeString()
         : new Date().toLocaleTimeString()
     },
     {
-      id: 'ns=1;s=Data/MySwitch',
+      id: pathNodeIds['Data/MySwitch'] ?? 'ns=0;i=unknown',
       name: 'MySwitch',
-      value: wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.value ?? 'False',
+      value: pathNodeIds['Data/MySwitch'] && wsManager.opcUaUpdates[pathNodeIds['Data/MySwitch']]?.value !== undefined
+        ? wsManager.opcUaUpdates[pathNodeIds['Data/MySwitch']].value
+        : 'False',
       type: 'Boolean',
-      status: wsManager.connected ? 'Good' : 'Offline',
-      ts: wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.timestamp 
-        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/MySwitch'].timestamp).toLocaleTimeString()
+      status: wsManager.connected && pathNodeIds['Data/MySwitch'] ? 'Good' : 'Offline',
+      ts: pathNodeIds['Data/MySwitch'] && wsManager.opcUaUpdates[pathNodeIds['Data/MySwitch']]?.timestamp 
+        ? new Date(wsManager.opcUaUpdates[pathNodeIds['Data/MySwitch']].timestamp).toLocaleTimeString()
         : new Date().toLocaleTimeString()
     },
     {
-      id: 'ns=1;s=Data/PumpRunning',
+      id: pathNodeIds['Data/PumpRunning'] ?? 'ns=0;i=unknown',
       name: 'PumpRunning',
-      value: wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.value ?? 'False',
+      value: pathNodeIds['Data/PumpRunning'] && wsManager.opcUaUpdates[pathNodeIds['Data/PumpRunning']]?.value !== undefined
+        ? wsManager.opcUaUpdates[pathNodeIds['Data/PumpRunning']].value
+        : 'False',
       type: 'Boolean',
-      status: wsManager.connected ? 'Good' : 'Offline',
-      ts: wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.timestamp 
-        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning'].timestamp).toLocaleTimeString()
+      status: wsManager.connected && pathNodeIds['Data/PumpRunning'] ? 'Good' : 'Offline',
+      ts: pathNodeIds['Data/PumpRunning'] && wsManager.opcUaUpdates[pathNodeIds['Data/PumpRunning']]?.timestamp 
+        ? new Date(wsManager.opcUaUpdates[pathNodeIds['Data/PumpRunning']].timestamp).toLocaleTimeString()
         : new Date().toLocaleTimeString()
     },
     {
-      id: 'ns=1;s=Data/TankLevel',
+      id: pathNodeIds['Data/TankLevel'] ?? 'ns=0;i=unknown',
       name: 'TankLevel',
-      value: wsManager.opcUaUpdates['ns=1;s=Data/TankLevel']?.value !== undefined
-        ? parseFloat(wsManager.opcUaUpdates['ns=1;s=Data/TankLevel'].value).toFixed(1)
+      value: pathNodeIds['Data/TankLevel'] && wsManager.opcUaUpdates[pathNodeIds['Data/TankLevel']]?.value !== undefined
+        ? parseFloat(wsManager.opcUaUpdates[pathNodeIds['Data/TankLevel']].value).toFixed(1)
         : '45.0',
       type: 'Double',
-      status: wsManager.connected ? 'Good' : 'Offline',
-      ts: wsManager.opcUaUpdates['ns=1;s=Data/TankLevel']?.timestamp 
-        ? new Date(wsManager.opcUaUpdates['ns=1;s=Data/TankLevel'].timestamp).toLocaleTimeString()
+      status: wsManager.connected && pathNodeIds['Data/TankLevel'] ? 'Good' : 'Offline',
+      ts: pathNodeIds['Data/TankLevel'] && wsManager.opcUaUpdates[pathNodeIds['Data/TankLevel']]?.timestamp 
+        ? new Date(wsManager.opcUaUpdates[pathNodeIds['Data/TankLevel']].timestamp).toLocaleTimeString()
         : new Date().toLocaleTimeString()
     },
     {
-      id: 'ns=1;s=CounterControl/CounterValue',
+      id: pathNodeIds['CounterControl/CounterValue'] ?? 'ns=0;i=unknown',
       name: 'CounterValue',
-      value: wsManager.opcUaUpdates['ns=1;s=CounterControl/CounterValue']?.value ?? '0',
+      value: pathNodeIds['CounterControl/CounterValue'] && wsManager.opcUaUpdates[pathNodeIds['CounterControl/CounterValue']]?.value !== undefined
+        ? wsManager.opcUaUpdates[pathNodeIds['CounterControl/CounterValue']].value
+        : '0',
       type: 'Int32',
-      status: wsManager.connected ? 'Good' : 'Offline',
-      ts: wsManager.opcUaUpdates['ns=1;s=CounterControl/CounterValue']?.timestamp 
-        ? new Date(wsManager.opcUaUpdates['ns=1;s=CounterControl/CounterValue'].timestamp).toLocaleTimeString()
+      status: wsManager.connected && pathNodeIds['CounterControl/CounterValue'] ? 'Good' : 'Offline',
+      ts: pathNodeIds['CounterControl/CounterValue'] && wsManager.opcUaUpdates[pathNodeIds['CounterControl/CounterValue']]?.timestamp 
+        ? new Date(wsManager.opcUaUpdates[pathNodeIds['CounterControl/CounterValue']].timestamp).toLocaleTimeString()
         : new Date().toLocaleTimeString()
     },
     {
-      id: 'ns=1;s=FastCounters/Counter_1Hz',
+      id: pathNodeIds['FastCounters/Counter_1Hz'] ?? 'ns=0;i=unknown',
       name: 'Counter_1Hz',
-      value: wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz']?.value ?? '0',
+      value: pathNodeIds['FastCounters/Counter_1Hz'] && wsManager.opcUaUpdates[pathNodeIds['FastCounters/Counter_1Hz']]?.value !== undefined
+        ? wsManager.opcUaUpdates[pathNodeIds['FastCounters/Counter_1Hz']].value
+        : '0',
       type: 'Int32',
-      status: wsManager.connected ? 'Good' : 'Offline',
-      ts: wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz']?.timestamp 
-        ? new Date(wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz'].timestamp).toLocaleTimeString()
+      status: wsManager.connected && pathNodeIds['FastCounters/Counter_1Hz'] ? 'Good' : 'Offline',
+      ts: pathNodeIds['FastCounters/Counter_1Hz'] && wsManager.opcUaUpdates[pathNodeIds['FastCounters/Counter_1Hz']]?.timestamp 
+        ? new Date(wsManager.opcUaUpdates[pathNodeIds['FastCounters/Counter_1Hz']].timestamp).toLocaleTimeString()
         : new Date().toLocaleTimeString()
     }
   ]);
@@ -217,7 +271,9 @@ end`);
    * Svelte 5 Effect block plotting live Counter_1Hz updates onto TimeSeries graph.
    */
   $effect(() => {
-    const update = wsManager.opcUaUpdates['ns=1;s=FastCounters/Counter_1Hz'];
+    const counterId = pathNodeIds['FastCounters/Counter_1Hz'];
+    if (!counterId) return;
+    const update = wsManager.opcUaUpdates[counterId];
     if (update) {
       const timestamp = update.timestamp;
       const value = parseFloat(update.value);
@@ -428,7 +484,11 @@ end`);
       </div>
       <div class="glass-card full-card">
         <!-- Dynamic inline SVG component simulating water vessel levels -->
-        <SynopticView />
+        <SynopticView 
+          pumpRunningNodeId={pathNodeIds['Data/PumpRunning']}
+          valveOpenNodeId={pathNodeIds['Data/MySwitch']}
+          tankLevelNodeId={pathNodeIds['Data/TankLevel']}
+        />
       </div>
 
     <!-- ==========================================

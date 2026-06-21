@@ -18,24 +18,39 @@
 
   import { wsManager } from './websocket.svelte';
 
+  // Define component props using Svelte 5 `$props` rune
+  let {
+    pumpRunningNodeId = '',
+    valveOpenNodeId = '',
+    tankLevelNodeId = ''
+  } = $props<{
+    pumpRunningNodeId?: string;
+    valveOpenNodeId?: string;
+    tankLevelNodeId?: string;
+  }>();
+
   // --- Dynamic Simulator State Variables (Derived from real OPC-UA node states) ---
   // Valve State (true = OPEN, fluid drains out; false = CLOSED, fluid is blocked)
   let valveOpen = $derived(
-    wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.value === 'true' ||
-    wsManager.opcUaUpdates['ns=1;s=Data/MySwitch']?.value === 'True'
+    valveOpenNodeId && (
+      wsManager.opcUaUpdates[valveOpenNodeId]?.value === 'true' ||
+      wsManager.opcUaUpdates[valveOpenNodeId]?.value === 'True'
+    )
   );
   
   // Storage Tank Water Level (ranges from 0% [empty] to 100% [maximum capacity])
   let tankLevel = $derived(
-    wsManager.opcUaUpdates['ns=1;s=Data/TankLevel']?.value !== undefined
-      ? parseFloat(wsManager.opcUaUpdates['ns=1;s=Data/TankLevel'].value)
+    tankLevelNodeId && wsManager.opcUaUpdates[tankLevelNodeId]?.value !== undefined
+      ? parseFloat(wsManager.opcUaUpdates[tankLevelNodeId].value)
       : 45
   );
   
   // Inlet Feed Pump State (true = RUNNING, pushes fluid in; false = STOPPED)
   let pumpRunning = $derived(
-    wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.value === 'true' ||
-    wsManager.opcUaUpdates['ns=1;s=Data/PumpRunning']?.value === 'True'
+    pumpRunningNodeId && (
+      wsManager.opcUaUpdates[pumpRunningNodeId]?.value === 'true' ||
+      wsManager.opcUaUpdates[pumpRunningNodeId]?.value === 'True'
+    )
   );
 
   // Dash displacement offset (in pixels) for fluid movement stroke animations
@@ -43,17 +58,20 @@
 
   // Dispatch real OPC-UA write actions via REST endpoints
   async function togglePump() {
+    if (!pumpRunningNodeId) return;
     const nextState = !pumpRunning;
-    await wsManager.writeOpcUaValue('ns=1;s=Data/PumpRunning', String(nextState), 'Boolean');
+    await wsManager.writeOpcUaValue(pumpRunningNodeId, String(nextState), 'Boolean');
   }
 
   async function toggleValve() {
+    if (!valveOpenNodeId) return;
     const nextState = !valveOpen;
-    await wsManager.writeOpcUaValue('ns=1;s=Data/MySwitch', String(nextState), 'Boolean');
+    await wsManager.writeOpcUaValue(valveOpenNodeId, String(nextState), 'Boolean');
   }
 
   async function handleSliderChange(valStr: string) {
-    await wsManager.writeOpcUaValue('ns=1;s=Data/TankLevel', valStr, 'Double');
+    if (!tankLevelNodeId) return;
+    await wsManager.writeOpcUaValue(tankLevelNodeId, valStr, 'Double');
   }
 
   /**
