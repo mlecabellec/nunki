@@ -1,59 +1,100 @@
 <script lang="ts">
-  /*
-   * REQ-00025 – Support for authentication interface
-   * REQ-00026 – Offline build support/clean navigation
-   * TSK-00030.1 – Create Navbar Component
+  /**
+   * @component Navbar
+   * @description Architecture Component: Application Navigation Header Layer.
+   * Renders the top navigation header bar, coordinating the active workbenches state.
+   * Coordinates dropdown menus, nested submenus, profile options, and global outside-click monitors.
+   * 
+   * Interactive Features:
+   * - Responsive toggle menus: Workbenches dropdown, User dropdown.
+   * - Nested Submenus: Values (List, Search, Tree Views) and Automation (Lua script panels).
+   * - Outside Click Detection: Automatically closes menu popovers when clicking outside the navbar container.
+   * 
+   * System Requirements Satisfied:
+   * - REQ-00025: Support for authentication interface (Login, Logout, Profile panels).
+   * - REQ-00026: Offline build support/clean navigation (smooth client routes, no external CDN dependencies).
+   * - TSK-00030.1: Create Navbar Component (modular navigation design).
    */
 
   import { onMount } from 'svelte';
+  
+  // Import SVG icons from lucide-svelte library
   import { 
-    User as UserIcon, 
-    Settings, 
-    LogIn, 
-    LogOut, 
-    Terminal, 
-    Activity, 
-    Tv, 
-    Sliders,
-    ChevronDown,
-    ChevronRight,
-    List,
-    Search,
-    Network,
-    Cpu,
-    Code,
-    Database
+    User as UserIcon,  // Repesents user profile controls
+    Settings,          // Profile configurations
+    LogIn,             // Authenticated sign-in triggers
+    LogOut,            // Authenticated sign-out triggers
+    Terminal,          // System logging terminal link
+    Activity,          // Time-series trend chart indicator
+    Tv,                // SVG Mimic Synoptic diagram indicator
+    Sliders,           // Workbenches parent category icon
+    ChevronDown,       // Dropdown expand arrow
+    ChevronRight,      // Nested menu expand arrow
+    List,              // Variable database lists
+    Search,            // Tag search engine
+    Network,           // Tree view node hierarchy
+    Cpu,               // Automation section parent icon
+    Code,              // Lua script editor trigger
+    Database           // Address space values category
   } from '@lucide/svelte';
 
-  // Props
+  // --- Component Props Schema ---
+  // - `onSelect`: Callback function dispatched to propagate navigation actions to App.svelte.
+  // - `currentTab`: String code representing the active visible workbench tab.
   let { onSelect, currentTab }: { onSelect: (tab: string) => void; currentTab: string } = $props();
 
+  // --- Svelte 5 Local Runes States ---
+  // Caches which main category dropdown is expanded ('workbenches', 'user', or null if closed)
   let openDropdown = $state<string | null>(null);
+  
+  // Caches which nested sub-category panel is expanded ('values', 'automation', or null if closed)
   let activeSubmenu = $state<string | null>(null);
 
+  /**
+   * Life Cycle Hook: `onMount`
+   * Registers a global listener capturing mouse down clicks.
+   * Compares the target target element against `.nav-item` tags. If the click occurred
+   * outside, automatically collapses active menu elements.
+   */
   onMount(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
+      // Close dropdowns only if click target does not belong to the menu wrapper
       if (!target.closest('.nav-item')) {
         openDropdown = null;
         activeSubmenu = null;
       }
     };
     window.addEventListener('click', handleOutsideClick);
+    
+    // Svelte 5 return destructor: cleans up window event listeners to prevent memory leaks
     return () => window.removeEventListener('click', handleOutsideClick);
   });
 
+  /**
+   * Main dropdown toggle.
+   * 
+   * @param {string} menu - Dropdown code ('workbenches' or 'user').
+   * @param {MouseEvent} event - Click trigger event used to restrict event propagation.
+   */
   function toggleDropdown(menu: string, event: MouseEvent) {
-    event.stopPropagation();
+    event.stopPropagation(); // Block window.click outside handler from firing
     if (openDropdown === menu) {
       openDropdown = null;
-      activeSubmenu = null;
+      activeSubmenu = null; // Close submenus on parent collapse
     } else {
       openDropdown = menu;
-      activeSubmenu = null;
+      activeSubmenu = null; // Reset submenus on switching menus
     }
   }
 
+  /**
+   * Menu choice click selector.
+   * Triggers the navigation callback and collapses layout containers.
+   * 
+   * @param {string} tab - Selected tab identifier.
+   * @param {MouseEvent} event - Click trigger event.
+   */
   function handleSelect(tab: string, event: MouseEvent) {
     event.stopPropagation();
     onSelect(tab);
@@ -61,6 +102,12 @@
     activeSubmenu = null;
   }
 
+  /**
+   * Submenu toggle.
+   * 
+   * @param {string} submenu - Submenu code ('values' or 'automation').
+   * @param {MouseEvent} event - Click trigger event.
+   */
   function toggleSubmenu(submenu: string, event: MouseEvent) {
     event.stopPropagation();
     activeSubmenu = activeSubmenu === submenu ? null : submenu;
@@ -69,16 +116,21 @@
 
 <header class="top-navbar">
   <div class="navbar-container">
-    <!-- LEFT ALIGNED SECTION: Brand + Main Workbench Nav -->
+    
+    <!-- ==========================================
+         --- LEFT NAV: BRANDING & WORKBENCHES ---
+         ========================================== -->
     <div class="left-section">
       <div class="brand">
+        <!-- Graphic brand block utilizing CSS color gradients -->
         <div class="brand-logo">N</div>
         <span class="brand-name">Nunki Dashboard</span>
       </div>
 
       <nav class="nav-menu">
-        <!-- WORKBENCHES MENU -->
+        <!-- WORKBENCHES DIRECTORY PANEL -->
         <div class="nav-item">
+          <!-- Button with expanded status attributes mapped to accessibility standard tools -->
           <button 
             class="nav-btn" 
             class:active={openDropdown === 'workbenches'} 
@@ -92,20 +144,25 @@
           
           {#if openDropdown === 'workbenches'}
             <div class="dropdown-menu large-dropdown left-align">
+              <!-- Logs Panel Workbench Selection -->
               <button class="dropdown-item" class:selected={currentTab === 'home'} onclick={(e) => handleSelect('home', e)}>
                 <Terminal size={14} />
                 <span>Logs</span>
               </button>
+              
+              <!-- Charts Panel Workbench Selection -->
               <button class="dropdown-item" class:selected={currentTab === 'timeseries'} onclick={(e) => handleSelect('timeseries', e)}>
                 <Activity size={14} />
                 <span>Charts</span>
               </button>
+              
+              <!-- Synoptics Panel Workbench Selection -->
               <button class="dropdown-item" class:selected={currentTab === 'diagrams'} onclick={(e) => handleSelect('diagrams', e)}>
                 <Tv size={14} />
                 <span>Synoptics</span>
               </button>
               
-              <!-- VALUES NESTED SUBMENU -->
+              <!-- VALUES SUB-NAV CONTROLS -->
               <div class="submenu-container">
                 <button class="dropdown-item has-submenu" onclick={(e) => toggleSubmenu('values', e)}>
                   <Database size={14} />
@@ -114,6 +171,7 @@
                 </button>
                 
                 {#if activeSubmenu === 'values'}
+                  <!-- Indented nesting submenu panel -->
                   <div class="submenu-panel">
                     <button class="dropdown-item" class:selected={currentTab === 'values-list'} onclick={(e) => handleSelect('values-list', e)}>
                       <List size={12} />
@@ -131,7 +189,7 @@
                 {/if}
               </div>
 
-              <!-- AUTOMATION NESTED SUBMENU -->
+              <!-- AUTOMATION SUB-NAV CONTROLS -->
               <div class="submenu-container">
                 <button class="dropdown-item has-submenu" onclick={(e) => toggleSubmenu('automation', e)}>
                   <Cpu size={14} />
@@ -154,11 +212,13 @@
       </nav>
     </div>
 
-    <!-- RIGHT ALIGNED SECTION: User Account settings -->
+    <!-- ==========================================
+         --- RIGHT NAV: PROFILE & AUTH CONTROLS ---
+         ========================================== -->
     <div class="right-section">
       <nav class="nav-menu">
-        <!-- USER MENU -->
         <div class="nav-item">
+          <!-- Button with expanded status attributes mapped to accessibility standard tools -->
           <button 
             class="nav-btn" 
             class:active={openDropdown === 'user'} 
@@ -172,14 +232,17 @@
           
           {#if openDropdown === 'user'}
             <div class="dropdown-menu right-align">
+              <!-- Log In Trigger -->
               <button class="dropdown-item" onclick={(e) => handleSelect('login', e)}>
                 <LogIn size={14} />
                 <span>Log in</span>
               </button>
+              <!-- Log Out Trigger -->
               <button class="dropdown-item" onclick={(e) => handleSelect('logout', e)}>
                 <LogOut size={14} />
                 <span>Log out</span>
               </button>
+              <!-- Profile details trigger -->
               <button class="dropdown-item" onclick={(e) => handleSelect('profile', e)}>
                 <Settings size={14} />
                 <span>Profile</span>
@@ -193,6 +256,7 @@
 </header>
 
 <style>
+  /* Header Container */
   .top-navbar {
     height: 56px;
     background: var(--code-bg);
@@ -233,6 +297,7 @@
     gap: 10px;
   }
 
+  /* BRAND LOGO: CSS linear gradients with violet neon drop shadows */
   .brand-logo {
     width: 28px;
     height: 28px;
@@ -263,6 +328,7 @@
     position: relative;
   }
 
+  /* Navigation Button Styling */
   .nav-btn {
     display: flex;
     align-items: center;
@@ -294,11 +360,12 @@
     transition: transform 0.2s;
   }
 
+  /* Chevron flips 180 degrees when category is active */
   .nav-btn.active :global(.arrow-icon) {
     transform: rotate(180deg);
   }
 
-  /* Dropdown Styles */
+  /* Dropdown context wrapper styling */
   .dropdown-menu {
     position: absolute;
     top: calc(100% + 4px);
@@ -326,6 +393,7 @@
     min-width: 190px;
   }
 
+  /* Entry slide down and fade in interpolation */
   @keyframes slideDown {
     from {
       opacity: 0;
@@ -365,7 +433,6 @@
     color: var(--accent);
   }
 
-  /* Submenu Styles */
   .submenu-container {
     position: relative;
     display: flex;
@@ -385,6 +452,7 @@
     transform: rotate(90deg);
   }
 
+  /* Indented sub-category panels */
   .submenu-panel {
     background: var(--code-bg);
     border-radius: 6px;

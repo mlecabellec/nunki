@@ -113,87 +113,98 @@ public class OpcUaClientService implements OpcUaClientApi {
     @Override
     public CompletableFuture<OpcUaNodeDto> browseTree(NodeId rootNodeId) {
         java.util.Objects.requireNonNull(rootNodeId, "rootNodeId must not be null");
-        return connectionManager.getClient().thenCompose(client -> browseNodeRecursive(client, rootNodeId));
+        return connectionManager.getClient().thenCompose(client -> 
+            client.getAddressSpace().getNodeAsync(rootNodeId).thenCompose(node -> {
+                String name = node.getDisplayName().getText();
+                if (name == null) {
+                    name = node.getBrowseName().getName();
+                }
+                if (name == null) {
+                    name = rootNodeId.toParseableString();
+                }
+                return browseNodeRecursive(client, rootNodeId, name, node.getNodeClass().name());
+            })
+        );
     }
 
-    private CompletableFuture<OpcUaNodeDto> browseNodeRecursive(org.eclipse.milo.opcua.sdk.client.OpcUaClient client, NodeId nodeId) {
-        return client.getAddressSpace().getNodeAsync(nodeId).thenCompose(node -> {
-            String name = node.getDisplayName().getText();
-            if (name == null) {
-                name = node.getBrowseName().getName();
-            }
-            if (name == null) {
-                name = nodeId.toParseableString();
-            }
-            final String finalName = name;
-            final String nodeClass = node.getNodeClass().name();
+    private CompletableFuture<OpcUaNodeDto> browseNodeRecursive(
+            org.eclipse.milo.opcua.sdk.client.OpcUaClient client,
+            NodeId nodeId,
+            String finalName,
+            String nodeClass) {
 
-            CompletableFuture<String> valueFuture;
-            if (node.getNodeClass() == org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass.Variable) {
-                valueFuture = client.readValue(0.0, TimestampsToReturn.Both, nodeId)
-                    .thenApply(val -> {
-                        if (val.getValue().getValue() != null) {
-                            return val.getValue().getValue().toString();
-                        }
-                        return "";
-                    }).exceptionally(ex -> "");
-            } else {
-                valueFuture = CompletableFuture.completedFuture("");
-            }
+        CompletableFuture<String> valueFuture;
+        if ("Variable".equalsIgnoreCase(nodeClass)) {
+            valueFuture = client.readValue(0.0, TimestampsToReturn.Both, nodeId)
+                .thenApply(val -> {
+                    if (val.getValue().getValue() != null) {
+                        return val.getValue().getValue().toString();
+                    }
+                    return "";
+                }).exceptionally(ex -> "");
+        } else {
+            valueFuture = CompletableFuture.completedFuture("");
+        }
 
-            org.eclipse.milo.opcua.stack.core.types.structured.BrowseDescription browseDesc =
-                new org.eclipse.milo.opcua.stack.core.types.structured.BrowseDescription(
-                    nodeId,
-                    org.eclipse.milo.opcua.stack.core.types.enumerated.BrowseDirection.Forward,
-                    org.eclipse.milo.opcua.stack.core.Identifiers.HierarchicalReferences,
-                    true,
-                    org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.uint(
-                        org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass.Object.getValue() |
-                        org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass.Variable.getValue() |
-                        org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass.Method.getValue()
-                    ),
-                    org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.uint(
-                        org.eclipse.milo.opcua.stack.core.types.enumerated.BrowseResultMask.All.getValue()
-                    )
+        if ("Variable".equalsIgnoreCase(nodeClass) || "Method".equalsIgnoreCase(nodeClass)) {
+            return valueFuture.thenApply(value ->
+                new OpcUaNodeDto(nodeId.toParseableString(), finalName, nodeClass, value, java.util.Collections.emptyList())
+            );
+        }
+
+        org.eclipse.milo.opcua.stack.core.types.structured.BrowseDescription browseDesc =
+            new org.eclipse.milo.opcua.stack.core.types.structured.BrowseDescription(
+                nodeId,
+                org.eclipse.milo.opcua.stack.core.types.enumerated.BrowseDirection.Forward,
+                org.eclipse.milo.opcua.stack.core.Identifiers.HierarchicalReferences,
+                true,
+                org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.uint(
+                    org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass.Object.getValue() |
+                    org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass.Variable.getValue() |
+                    org.eclipse.milo.opcua.stack.core.types.enumerated.NodeClass.Method.getValue()
+                ),
+                org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.Unsigned.uint(
+                    org.eclipse.milo.opcua.stack.core.types.enumerated.BrowseResultMask.All.getValue()
+                )
+            );
+
+        CompletableFuture<org.eclipse.milo.opcua.stack.core.types.structured.BrowseResult> browseFuture = client.browse(browseDesc);
+
+        return valueFuture.thenCombine(browseFuture, (value, browseResult) -> {
+            org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription[] refs = browseResult.getReferences();
+            if (refs == null || refs.length == 0) {
+                return CompletableFuture.completedFuture(
+                    new OpcUaNodeDto(nodeId.toParseableString(), finalName, nodeClass, value, java.util.Collections.emptyList())
                 );
+            }
 
-            CompletableFuture<org.eclipse.milo.opcua.stack.core.types.structured.BrowseResult> browseFuture = client.browse(browseDesc);
+            List<org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription> refList = java.util.Arrays.asList(refs);
+            List<OpcUaNodeDto> accumulated = new java.util.ArrayList<>();
+            return browseChildrenSequentially(client, refList, 0, accumulated)
+                .thenApply(childrenList -> new OpcUaNodeDto(nodeId.toParseableString(), finalName, nodeClass, value, childrenList));
+        }).thenCompose(f -> f);
+    }
 
-            return valueFuture.thenCombine(browseFuture, (value, browseResult) -> {
-                org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription[] refs = browseResult.getReferences();
-                if (refs == null || refs.length == 0) {
-                    return CompletableFuture.completedFuture(
-                        new OpcUaNodeDto(nodeId.toParseableString(), finalName, nodeClass, value, java.util.Collections.emptyList())
-                    );
-                }
-
-                List<CompletableFuture<OpcUaNodeDto>> childFutures = new java.util.ArrayList<>();
-                for (org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription ref : refs) {
-                    NodeId childNodeId = ref.getNodeId().toNodeId(client.getNamespaceTable()).orElse(null);
-                    if (childNodeId != null) {
-                        // Avoid deep recursion into standard system Server node
-                        if ("Server".equals(ref.getBrowseName().getName())) {
-                            continue;
-                        }
-                        childFutures.add(browseNodeRecursive(client, childNodeId));
-                    }
-                }
-
-                if (childFutures.isEmpty()) {
-                    return CompletableFuture.completedFuture(
-                        new OpcUaNodeDto(nodeId.toParseableString(), finalName, nodeClass, value, java.util.Collections.emptyList())
-                    );
-                }
-
-                CompletableFuture<Void> allChildrenFuture = CompletableFuture.allOf(childFutures.toArray(new CompletableFuture[0]));
-                return allChildrenFuture.thenApply(v -> {
-                    List<OpcUaNodeDto> childrenList = new java.util.ArrayList<>();
-                    for (CompletableFuture<OpcUaNodeDto> cf : childFutures) {
-                        childrenList.add(cf.join());
-                    }
-                    return new OpcUaNodeDto(nodeId.toParseableString(), finalName, nodeClass, value, childrenList);
-                });
-            }).thenCompose(f -> f);
+    private CompletableFuture<List<OpcUaNodeDto>> browseChildrenSequentially(
+            org.eclipse.milo.opcua.sdk.client.OpcUaClient client,
+            List<org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription> refs,
+            int index,
+            List<OpcUaNodeDto> accumulated) {
+        
+        if (index >= refs.size()) {
+            return CompletableFuture.completedFuture(accumulated);
+        }
+        
+        org.eclipse.milo.opcua.stack.core.types.structured.ReferenceDescription ref = refs.get(index);
+        NodeId childNodeId = ref.getNodeId().toNodeId(client.getNamespaceTable()).orElse(null);
+        
+        if (childNodeId == null || "Server".equals(ref.getBrowseName().getName())) {
+            return browseChildrenSequentially(client, refs, index + 1, accumulated);
+        }
+        
+        return browseNodeRecursive(client, childNodeId, ref.getDisplayName().getText(), ref.getNodeClass().name()).thenCompose(childDto -> {
+            accumulated.add(childDto);
+            return browseChildrenSequentially(client, refs, index + 1, accumulated);
         });
     }
 }

@@ -70,7 +70,7 @@ public class SubscriptionManager {
                     // Build request for the node
                     ReadValueId readValueId = new ReadValueId(nodeId, AttributeId.Value.uid(), null, null);
                     MonitoringParameters monitoringParameters = new MonitoringParameters(
-                        UInteger.valueOf(1), // client handle
+                        subscription.nextClientHandle(), // client handle
                         interval, // sampling interval
                         null, // filter, none
                         UInteger.valueOf(10), // queue size

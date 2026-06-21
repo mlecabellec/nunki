@@ -1,51 +1,114 @@
 <script lang="ts">
-  import { wsManager } from './websocket.svelte';
+  /**
+   * @component OpcUaTreeNode
+   * @description Architecture Component: Dynamic Telemetry Tree / HMI Node View.
+   * Renders a recursive tree node mapped to the remote OPC-UA address space.
+   * Leverages Svelte 5 runes (`$props`, `$state`, `$derived`, `$effect`) to dynamically
+   * update telemetry leaves in response to global WebSocket signals (`wsManager.opcUaUpdates`).
+   * 
+   * Supported NodeClasses:
+   * - `Object`: Renders as folders with collapsible chevron expansion triggers and recursive sub-tree lists.
+   * - `Variable`: Displays real-time tag values, flashes on telemetry changes, and provides inline write inputs.
+   * - `Method`: Renders lightning symbol execution links with status outputs.
+   */
 
-  // Props definition
+  import { wsManager } from './websocket.svelte';
+  // Import itself to support Svelte 5 recursive self-import components (replacing deprecated <svelte:self>)
+  import OpcUaTreeNode from './OpcUaTreeNode.svelte';
+
+  /**
+   * OpcUaNode interface mapping standard schemas.
+   */
   interface OpcUaNode {
-    nodeId: string;
-    name: string;
-    nodeClass: string;
-    value: string;
-    children: OpcUaNode[];
+    nodeId: string;       // Absolute OPC-UA Node Identifier (e.g. 'ns=1;s=Data/MyInt')
+    name: string;         // Human readable identifier name (e.g. 'MyInt')
+    nodeClass: string;    // OPC-UA class type classification ('Object' | 'Variable' | 'Method')
+    value: string;        // Initial value payload string
+    children: OpcUaNode[];// Nested children collection for Object folders
   }
 
+  // Define component props using Svelte 5 `$props` rune
   let { node } = $props<{ node: OpcUaNode }>();
 
+  // ==========================================
+  // --- LOCAL Runes STATE PROPERTIES ---
+  // ==========================================
+  
+  // Controls collapsible panel expansion status (default: true [expanded])
   let isOpen = $state(true);
+  
+  // Toggles inline edit mode editor inputs (default: false [read-only display])
   let isEditing = $state(false);
+  
+  // Caches keyboard text edits before submitting to REST controllers
   let editValue = $state('');
+  
+  // Spinner trigger indicating an active REST write request is processing
   let isSaving = $state(false);
+  
+  // Spinner trigger indicating a method execution is processing
   let isInvoking = $state(false);
+  
+  // Caches output details returned from method executions
   let invokeResult = $state<string | null>(null);
 
-  // Deriving the live value reactively from wsManager STOMP updates state
+  /**
+   * Reactive Derived state: Intercepts updates from wsManager.opcUaUpdates.
+   * If a new value is broadcasted over the STOMP channel, overrides the default node.value.
+   */
   let liveValue = $derived(
     wsManager.opcUaUpdates[node.nodeId]?.value !== undefined
       ? wsManager.opcUaUpdates[node.nodeId].value
       : node.value
   );
 
-  // Detect live changes and trigger a micro-animation flash
+  // Animation flag indicating the value has changed
   let flash = $state(false);
+  
+  /**
+   * Reactive effect tracking shifts in liveValue.
+   * Triggers a momentary highlight flash (flash = true) and sets a timer to clear the state.
+   */
   $effect(() => {
-    const val = liveValue;
+    const val = liveValue; // Establishes a reactive dependency on liveValue
     flash = true;
     const timer = setTimeout(() => {
       flash = false;
     }, 800);
+    // Cleanup callback executed to reset pending timeouts if values transition rapidly
     return () => clearTimeout(timer);
   });
 
+  /**
+   * Collapses/Expands nested directory panels.
+   */
   function toggleOpen() {
     isOpen = !isOpen;
   }
 
+  /**
+   * Activates edit mode and pre-populates state with current telemetry.
+   */
   function startEditing() {
     editValue = liveValue;
     isEditing = true;
   }
 
+  /**
+   * Basic type heuristic helper.
+   * Analyzes tag names and value strings to guess primitive datatypes.
+   * Avoids writing incorrect datatypes to the Milo OPC-UA server.
+   * 
+   * Rules:
+   * - Boolean: If value is 'true'/'false' or name contains 'switch'/'bool'.
+   * - Double: If value is numeric and contains a decimal point '.'.
+   * - Integer: If value is numeric but has no decimals.
+   * - String: Default fallback datatype.
+   * 
+   * @param {string} val - String input.
+   * @param {string} name - Tag name.
+   * @returns {string} Inferred type string.
+   */
   function inferType(val: string, name: string): string {
     const lowerName = name.toLowerCase();
     if (val === 'true' || val === 'false' || lowerName.includes('switch') || lowerName.includes('bool')) {
@@ -58,6 +121,10 @@
     return 'String';
   }
 
+  /**
+   * Handles REST Post value submission.
+   * Dispatches details to the backend controller, updates loaders, and exits edit mode on success.
+   */
   async function handleWrite() {
     isSaving = true;
     const type = inferType(editValue, node.name);
@@ -70,6 +137,10 @@
     }
   }
 
+  /**
+   * Dispatches REST Method invocation calls.
+   * Infers parent object IDs by splitting path delimiters.
+   */
   async function handleInvoke() {
     isInvoking = true;
     invokeResult = null;
@@ -90,6 +161,7 @@
 <div class="tree-node" class:folder={node.nodeClass === 'Object'}>
   <div class="node-header">
     {#if node.nodeClass === 'Object'}
+      <!-- OBJECT: Collapsible directory header -->
       <button class="toggle-btn" onclick={toggleOpen}>
         <span class="chevron" class:open={isOpen}>▶</span>
         <span class="icon">📁</span>
@@ -97,6 +169,7 @@
       </button>
       <span class="node-id mono text-muted">{node.nodeId}</span>
     {:else if node.nodeClass === 'Variable'}
+      <!-- VARIABLE: Displays real-time telemetry leaf -->
       <span class="icon">🔢</span>
       <span class="name">{node.name}</span>
       <span class="value-container" class:flash={flash}>
@@ -105,6 +178,7 @@
       <span class="node-id mono text-muted">{node.nodeId}</span>
       
       {#if isEditing}
+        <!-- Inline input editor panel -->
         <div class="edit-inline">
           <input 
             type="text" 
@@ -124,6 +198,7 @@
         <button class="btn-action edit" onclick={startEditing}>Edit</button>
       {/if}
     {:else if node.nodeClass === 'Method'}
+      <!-- METHOD: Execution control deck -->
       <span class="icon">⚡</span>
       <span class="name method-name">{node.name}()</span>
       <span class="node-id mono text-muted">{node.nodeId}</span>
@@ -141,10 +216,11 @@
     {/if}
   </div>
 
+  <!-- RECURSION BRANCH: Render subfolders if nodeClass is 'Object' and node is expanded -->
   {#if node.nodeClass === 'Object' && isOpen && node.children && node.children.length > 0}
     <div class="node-children">
       {#each node.children as child}
-        <svelte:self node={child} />
+        <OpcUaTreeNode node={child} />
       {/each}
     </div>
   {/if}
@@ -183,6 +259,7 @@
     font-size: inherit;
   }
 
+  /* Rotating arrow indicating directory status */
   .chevron {
     display: inline-block;
     font-size: 10px;
@@ -222,6 +299,7 @@
     transition: background-color 0.8s ease-out;
   }
 
+  /* Keyframe triggering neon glow highlight on live value shifts */
   @keyframes flash-bg {
     0% { background-color: var(--accent-bg); }
     100% { background-color: transparent; }
@@ -231,13 +309,14 @@
     animation: flash-bg 0.8s ease-out;
   }
 
+  /* Sidebar dashed border indent highlighting hierarchy depth */
   .node-children {
     padding-left: 20px;
     border-left: 1px dashed var(--border);
     margin-left: 8px;
   }
 
-  /* Buttons and controls */
+  /* UI Interactive action button shapes */
   .btn-action {
     font-size: 12px;
     padding: 2px 8px;
@@ -304,6 +383,7 @@
     gap: 8px;
   }
 
+  /* Execution badge metrics colors */
   .invoke-badge {
     font-size: 11px;
     padding: 1px 6px;
@@ -323,3 +403,5 @@
     color: var(--text);
   }
 </style>
+
+

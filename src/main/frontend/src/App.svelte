@@ -1,12 +1,18 @@
 <script lang="ts">
-  /*
-   * REQ-00014 – Support for websocket/STOMP async exchanges
-   * REQ-00021 – ability to display dynamic SVG diagrams and synoptics
-   * REQ-00022 – ability to display graph of time series
-   * REQ-00025 – Support for authentication interface
-   * REQ-00026 – Offline build support/clean navigation
-   * TSK-00031.1 – Integrate Navbar in App
-   * TSK-00024.1 – Premium Styling Redesign
+  /**
+   * @file App.svelte
+   * @description Main dashboard application shell for Nunki Control Panel.
+   * Orchestrates the active views (logs, charting, diagrams, OPC-UA registers)
+   * and houses mock models, Lua scripting emulation, and socket event callbacks.
+   * 
+   * Requirements:
+   * - REQ-00014: WebSocket/STOMP async exchanges
+   * - REQ-00021: Display dynamic SVG diagrams and synoptics
+   * - REQ-00022: Display graph of time series
+   * - REQ-00025: Support for authentication interface
+   * - REQ-00026: Offline build support/clean navigation
+   * - TSK-00031.1: Integrate Navbar in App
+   * - TSK-00024.1: Premium Styling Redesign
    */
 
   import { onMount, onDestroy } from 'svelte';
@@ -16,7 +22,7 @@
   import SynopticView from './lib/SynopticView.svelte';
   import OpcUaTreeNode from './lib/OpcUaTreeNode.svelte';
   
-  // Lucide Icons
+  // Import icons from lucide-svelte
   import { 
     Send, 
     Play, 
@@ -27,13 +33,24 @@
     Cpu
   } from '@lucide/svelte';
 
+  // --- Reactive States (Runes) ---
+  
+  // Currently active view tab ('home', 'diagrams', 'timeseries', 'values-list', 'values-search', 'tree', 'automation-lua')
   let activeTab = $state('home');
+  
+  // Tracks active account management modals ('login', 'logout', 'profile', or null)
   let userAction = $state<string | null>(null);
+  
+  // Username for mock login flow
   let loginUsername = $state('admin');
+  
+  // Password for mock login flow
   let loginPassword = $state('admin');
+  
+  // Simulated authentication state
   let isLoggedIn = $state(true);
 
-  // OPC-UA Tree state and fetching logic
+  // Schema interface representing an OPC-UA tree structure
   interface OpcUaNode {
     nodeId: string;
     name: string;
@@ -42,10 +59,18 @@
     children: OpcUaNode[];
   }
   
+  // Tree state populated from active OPC-UA backend endpoints
   let opcUaTree = $state<OpcUaNode | null>(null);
+  
+  // Flags whether a REST tree fetch request is actively running
   let isFetchingTree = $state(false);
+  
+  // Captures and displays OPC-UA tree connection error messages
   let treeFetchError = $state<string | null>(null);
 
+  /**
+   * Dispatches GET request to fetch remote OPC-UA address space node hierarchies.
+   */
   async function fetchOpcUaTree() {
     isFetchingTree = true;
     treeFetchError = null;
@@ -63,10 +88,10 @@
     }
   }
 
-  // Search input state
+  // Value filter query for searching the address space
   let searchQuery = $state('');
 
-  // Lua Scripting state
+  // Initial code template populated inside the Lua emulator text area
   let luaCode = $state(`-- Nunki Automation Script
 local val = opcua.read("ns=1;s=Data/MyInt")
 print("Current value of MyInt: " .. tostring(val))
@@ -74,18 +99,29 @@ if val > 40 then
     opcua.write("ns=1;s=Data/MySwitch", false)
     print("Switch turned OFF")
 end`);
+  
+  // Logs stdout buffers rendered inside the Lua execution console
   let luaConsoleLogs = $state<string[]>([]);
+  
+  // Toggles loader spinner on script execution runtime
   let isRunningLua = $state(false);
 
+  // Manual ping messaging input field content
   let pingText = $state('Ping Message');
+  
+  // Tracks active state of automated loop sending ping frames every 2 seconds
   let autoPingActive = $state(false);
+  
+  // Pointer reference to active setInterval instance for automated pings
   let autoPingIntervalId: any = null;
 
-  // Local chart data cache
+  // Chart telemetry cache
   interface ChartData {
     timestamp: number;
     value: number;
   }
+  
+  // Local reactive cache array plotted on the TimeSeries SVG chart
   let timeSeriesData = $state<ChartData[]>([
     { timestamp: Date.now() - 50000, value: 35 },
     { timestamp: Date.now() - 40000, value: 45 },
@@ -94,8 +130,18 @@ end`);
     { timestamp: Date.now() - 10000, value: 55 },
   ]);
 
-  // OPC UA simulated node values
-  let nodeValues = $state([
+  // Schema interface representing simulated table nodes
+  interface NodeValue {
+    id: string;
+    name: string;
+    value: string | number;
+    type: string;
+    status: string;
+    ts: string;
+  }
+
+  // Hardcoded simulated registers populated in the values dashboard views
+  let nodeValues = $state<NodeValue[]>([
     { id: 'ns=1;s=Data/MyInt', name: 'MyInt', value: 42, type: 'Int32', status: 'Good', ts: new Date().toLocaleTimeString() },
     { id: 'ns=1;s=Data/MyFloat', name: 'MyFloat', value: 84.15, type: 'Float', status: 'Good', ts: new Date().toLocaleTimeString() },
     { id: 'ns=1;s=Data/MySwitch', name: 'MySwitch', value: 'True', type: 'Boolean', status: 'Good', ts: new Date().toLocaleTimeString() },
@@ -103,43 +149,50 @@ end`);
     { id: 'ns=1;s=Data/SystemLoad', name: 'SystemLoad', value: 14.5, type: 'Double', status: 'Good', ts: new Date().toLocaleTimeString() },
   ]);
 
-  // Connect on mount
+  // Connect STOMP websockets on layout mount
   onMount(() => {
     wsManager.connect();
     fetchOpcUaTree();
   });
 
-  // Cleanup on destroy
+  // Stop background intervals and disconnect sockets on layout destroy
   onDestroy(() => {
     stopAutoPing();
     wsManager.disconnect();
   });
 
-  // Append new websocket pongs to the time series chart data & update simulated tag values
+  /**
+   * Svelte 5 Effect block linking incoming socket pings with the chart graph.
+   * Feeds the raw values into chart coordinates buffer and simulates active system loads.
+   */
   $effect(() => {
     const pongs = wsManager.pongs;
     if (pongs.length > 0) {
       const latestPong = pongs[0];
       const exists = timeSeriesData.some(d => d.timestamp === latestPong.timestamp);
       if (!exists) {
+        // Pre-calculate randomized values to feed the graph
         const lastVal = timeSeriesData.length > 0 ? timeSeriesData[timeSeriesData.length - 1].value : 50;
         const change = (Math.random() - 0.5) * 20;
         const newVal = Math.max(10, Math.min(95, lastVal + change));
         
+        // Append entry and limit buffer to last 20 coordinates
         timeSeriesData = [...timeSeriesData, {
           timestamp: latestPong.timestamp,
           value: parseFloat(newVal.toFixed(1))
         }].slice(-20);
 
-        // Update mock node values dynamically
+        // Update local mock registers dynamically on socket updates
         const randomValue = Math.floor(Math.random() * 100);
         nodeValues = nodeValues.map(node => {
           if (node.name === 'MyInt') {
             return { ...node, value: randomValue, ts: new Date().toLocaleTimeString() };
           }
           if (node.name === 'SystemLoad') {
+            // FIX: Safely assert node.value is a number to fix compiler errors
+            const currentVal = typeof node.value === 'number' ? node.value : parseFloat(node.value as string);
             const loadChange = (Math.random() - 0.5) * 5;
-            const newLoad = Math.max(5, Math.min(95, node.value + loadChange));
+            const newLoad = Math.max(5, Math.min(95, currentVal + loadChange));
             return { ...node, value: parseFloat(newLoad.toFixed(1)), ts: new Date().toLocaleTimeString() };
           }
           return node;
@@ -148,7 +201,7 @@ end`);
     }
   });
 
-  // Derived state for searches
+  // Derived filter logic matching search strings with node keys
   let filteredNodes = $derived(
     nodeValues.filter(node => 
       node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -156,6 +209,9 @@ end`);
     )
   );
 
+  /**
+   * Router selector callback linked to Navbar selections.
+   */
   function handleNavbarSelect(tab: string) {
     if (['login', 'logout', 'profile'].includes(tab)) {
       userAction = tab;
@@ -167,20 +223,32 @@ end`);
     }
   }
 
+  /**
+   * Mock authenticator sign-in submission handler.
+   */
   function handleLogin() {
     isLoggedIn = true;
     userAction = null;
   }
 
+  /**
+   * Mock authenticator sign-out handler.
+   */
   function handleLogout() {
     isLoggedIn = false;
     userAction = null;
   }
 
+  /**
+   * Dispatches manual ping messages onto STOMP sockets.
+   */
   function sendPing() {
     wsManager.sendPing(pingText);
   }
 
+  /**
+   * Toggles the automated ping loop timer.
+   */
   function toggleAutoPing() {
     if (autoPingActive) {
       stopAutoPing();
@@ -189,6 +257,9 @@ end`);
     }
   }
 
+  /**
+   * Spawns interval timer dispatching ping messages.
+   */
   function startAutoPing() {
     autoPingActive = true;
     autoPingIntervalId = setInterval(() => {
@@ -197,6 +268,9 @@ end`);
     }, 2000);
   }
 
+  /**
+   * Cleans up background interval loop timers.
+   */
   function stopAutoPing() {
     autoPingActive = false;
     if (autoPingIntervalId) {
@@ -205,6 +279,10 @@ end`);
     }
   }
 
+  /**
+   * Simulates Lua sandbox engine runtime execution.
+   * Feeds outputs directly onto console buffer display window.
+   */
   function runLuaScript() {
     isRunningLua = true;
     luaConsoleLogs = ["Initializing Lua engine v5.4...", "Connecting to OPC-UA address space..."];
@@ -212,7 +290,8 @@ end`);
       luaConsoleLogs = [...luaConsoleLogs, "Running automation script..."];
     }, 400);
     setTimeout(() => {
-      const targetInt = nodeValues.find(n => n.name === 'MyInt')?.value || 42;
+      // FIX: Cast string/number value to a reliable integer to resolve compiler operations
+      const targetInt = Number(nodeValues.find(n => n.name === 'MyInt')?.value ?? 42);
       luaConsoleLogs = [
         ...luaConsoleLogs, 
         `[OPC-UA] Read value of 'ns=1;s=Data/MyInt' -> ${targetInt}`,
@@ -230,10 +309,22 @@ end`);
   }
 </script>
 
+<!-- 
+  ==========================================
+  --- CORE APPLICATION TEMPLATE LAYOUT ---
+  ==========================================
+  Main layout wrapper configuring the global navbar and container spacing.
+-->
 <div class="app-layout">
+  <!-- Top navigation bar, dispatching selection events reactively to handleNavbarSelect -->
   <Navbar onSelect={handleNavbarSelect} currentTab={activeTab} />
 
+  <!-- Scrollable main panel content area -->
   <main class="main-content">
+    
+    <!-- ==========================================
+         --- PANEL VIEW A: HOME / LOGS VIEW ---
+         ========================================== -->
     {#if activeTab === 'home'}
       <div class="dashboard-header">
         <h1>Nunki Control Panel</h1>
@@ -241,11 +332,12 @@ end`);
       </div>
 
       <div class="grid-layout">
-        <!-- Ping Controls Card -->
+        <!-- WebSocket STOMP Test Deck Card -->
         <div class="glass-card ping-card">
           <h3>WebSocket / STOMP Ping Loop</h3>
           <p class="subtitle">Test async connectivity with Spring Boot backend</p>
           
+          <!-- Manual ping string dispatcher -->
           <div class="input-group">
             <input type="text" bind:value={pingText} placeholder="Enter ping text" />
             <button onclick={sendPing} disabled={!wsManager.connected} class="btn-send">
@@ -256,6 +348,7 @@ end`);
 
           <div class="divider"><span>OR</span></div>
 
+          <!-- Automated background 2-second ping toggle button -->
           <button onclick={toggleAutoPing} class="btn-auto-ping" class:active={autoPingActive} disabled={!wsManager.connected}>
             {#if autoPingActive}
               <Square size={16} fill="white" />
@@ -267,7 +360,7 @@ end`);
           </button>
         </div>
 
-        <!-- Ping Logs Card -->
+        <!-- WebSocket Response Logger Console Card -->
         <div class="glass-card logs-card">
           <div class="card-header">
             <h3>Response Logs</h3>
@@ -283,6 +376,7 @@ end`);
               </div>
             {:else}
               <div class="logs-list">
+                <!-- Renders historical WebSocket messages sorted chronologically -->
                 {#each wsManager.pongs as pong (pong.id)}
                   <div class="log-item">
                     <span class="log-time">{new Date(pong.timestamp).toLocaleTimeString()}</span>
@@ -295,15 +389,22 @@ end`);
         </div>
       </div>
 
+    <!-- ==========================================
+         --- PANEL VIEW B: PROCESS MIMIC DIAGRAMS ---
+         ========================================== -->
     {:else if activeTab === 'diagrams'}
       <div class="dashboard-header">
         <h1>Process Synoptics</h1>
         <p>Interactive process flow diagrams linked with dynamic sensor states</p>
       </div>
       <div class="glass-card full-card">
+        <!-- Dynamic inline SVG component simulating water vessel levels -->
         <SynopticView />
       </div>
 
+    <!-- ==========================================
+         --- PANEL VIEW C: TIME TRENDING CHARTS ---
+         ========================================== -->
     {:else if activeTab === 'timeseries'}
       <div class="dashboard-header">
         <h1>Time Series Visualizer</h1>
@@ -314,9 +415,13 @@ end`);
           <h3>Simulated Sensor Frequency (Hz)</h3>
           <span class="chart-points-count">{timeSeriesData.length} data points cached</span>
         </div>
+        <!-- SVG plotting component drawing raw points coordinate arrays -->
         <TimeSeriesChart data={timeSeriesData} />
       </div>
 
+    <!-- ==========================================
+         --- PANEL VIEW D: TELEMETRY VALUES LIST ---
+         ========================================== -->
     {:else if activeTab === 'values-list'}
       <div class="dashboard-header">
         <h1>OPC-UA Node values</h1>
@@ -335,6 +440,7 @@ end`);
             </tr>
           </thead>
           <tbody>
+            <!-- Simple tag matrix listing mock values -->
             {#each nodeValues as node}
               <tr>
                 <td class="mono">{node.id}</td>
@@ -349,12 +455,16 @@ end`);
         </table>
       </div>
 
+    <!-- ==========================================
+         --- PANEL VIEW E: REGISTERS SEARCH ENGINE ---
+         ========================================== -->
     {:else if activeTab === 'values-search'}
       <div class="dashboard-header">
         <h1>Search Address Space</h1>
         <p>Query nodes dynamically across all active registers</p>
       </div>
       <div class="glass-card full-card">
+        <!-- Input field dynamically filtering derived collection filteredNodes -->
         <div class="search-bar-container">
           <Search size={18} class="search-icon" />
           <input type="text" placeholder="Search by Node ID or Name (e.g. MyInt)" bind:value={searchQuery} />
@@ -390,12 +500,16 @@ end`);
         </table>
       </div>
 
+    <!-- ==========================================
+         --- PANEL VIEW F: RECURSIVE HIERARCHICAL TREE ---
+         ========================================== -->
     {:else if activeTab === 'tree'}
       <div class="dashboard-header">
         <h1>OPC-UA Address Space</h1>
         <p>Interactive view of active nodes, folders and attributes</p>
       </div>
       <div class="glass-card full-card">
+        <!-- Control strip offering address space re-scanning actions -->
         <div class="tree-controls" style="margin-bottom: 16px; display: flex; gap: 8px; align-items: center;">
           <button class="btn-action" onclick={fetchOpcUaTree} disabled={isFetchingTree} style="padding: 6px 16px; font-size: 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent-bg); color: var(--accent); transition: all 0.2s;">
             {isFetchingTree ? 'Refreshing...' : 'Refresh Address Space'}
@@ -408,6 +522,7 @@ end`);
         {#if isFetchingTree && !opcUaTree}
           <p style="text-align: center; padding: 20px; color: var(--text);">Loading address space from OPC-UA server...</p>
         {:else if opcUaTree}
+          <!-- Displays root tree node which recursively calls children instances -->
           <div class="tree-display" style="padding: 10px; max-height: 70vh; overflow-y: auto;">
             <OpcUaTreeNode node={opcUaTree} />
           </div>
@@ -418,12 +533,16 @@ end`);
         {/if}
       </div>
 
+    <!-- ==========================================
+         --- PANEL VIEW G: LUA SCRIPTS DECK ---
+         ========================================== -->
     {:else if activeTab === 'automation-lua'}
       <div class="dashboard-header">
         <h1>Lua Automation Scripting</h1>
         <p>Design event-driven scripts triggered on OPC-UA change subscriptions</p>
       </div>
       <div class="grid-layout">
+        <!-- Editor text container -->
         <div class="glass-card">
           <div class="card-header">
             <h3>Script Editor</h3>
@@ -435,6 +554,7 @@ end`);
           <textarea class="code-editor" bind:value={luaCode} rows="10"></textarea>
         </div>
 
+        <!-- Terminal log display simulating stdout/stderr buffers -->
         <div class="glass-card console-card">
           <h3>Execution Console</h3>
           <div class="console-box">
@@ -455,8 +575,11 @@ end`);
   </main>
 </div>
 
-<!-- Modal Dialog Backdrops -->
+<!-- ==========================================
+     --- DIALOG POPUP MODAL BACKDROPS ---
+     ========================================== -->
 {#if userAction}
+  <!-- Backing shadow. Closes modal on ESC keypress or clicking backdrop -->
   <div class="modal-backdrop" 
        onclick={(e) => { if (e.target === e.currentTarget) userAction = null; }} 
        onkeydown={(e) => { if (e.key === 'Escape') userAction = null; }}
@@ -464,6 +587,8 @@ end`);
        tabindex="-1"
        aria-label="Close modal">
     <div class="modal-content">
+      
+      <!-- Login modal dialogue -->
       {#if userAction === 'login'}
         <h3>Log In to Nunki</h3>
         <div class="form-group">
@@ -478,6 +603,8 @@ end`);
           <button class="btn-cancel" onclick={() => userAction = null}>Cancel</button>
           <button class="btn-primary" onclick={handleLogin}>Log In</button>
         </div>
+      
+      <!-- Logout confirmation modal dialogue -->
       {:else if userAction === 'logout'}
         <h3>Confirm Log Out</h3>
         <p>Are you sure you want to log out of the control panel?</p>
@@ -485,6 +612,8 @@ end`);
           <button class="btn-cancel" onclick={() => userAction = null}>Cancel</button>
           <button class="btn-danger" onclick={handleLogout}>Log Out</button>
         </div>
+      
+      <!-- User profile details dialogue -->
       {:else if userAction === 'profile'}
         <div class="profile-header">
           <UserCheck size={32} class="profile-icon" />
@@ -854,7 +983,10 @@ end`);
     outline: none;
   }
 
-  /* Tree Mockup styling */
+  /* 
+   * LEGACY TREE MOCKUP STYLING
+   * Retained for reference/regression fallback but commented out to clean compiler output.
+   *
   .tree-mockup {
     font-family: var(--mono);
     font-size: 13px;
@@ -902,6 +1034,7 @@ end`);
     background: rgba(128, 90, 213, 0.1);
     color: #805ad5;
   }
+  */
 
   /* Lua scripting styles */
   .btn-run {

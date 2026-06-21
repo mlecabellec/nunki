@@ -65,47 +65,58 @@ public class OpcUaWiringService {
 
     private CompletableFuture<Void> setupSubscriptionsForNode(NodeId nodeId) {
         return opcUaClient.browseTree(nodeId)
-            .thenAccept(rootDto -> {
+            .thenCompose(rootDto -> {
                 logger.info("[OPC-UA Wiring] Browsed OPC-UA tree successfully. Registering subscriptions...");
-                registerSubscriptionsRecursive(rootDto);
+                java.util.List<OpcUaNodeDto> variables = new java.util.ArrayList<>();
+                collectVariables(rootDto, variables);
+                logger.info("[OPC-UA Wiring] Found {} variables to subscribe.", variables.size());
+                
+                CompletableFuture<Void> future = CompletableFuture.completedFuture(null);
+                for (OpcUaNodeDto varNode : variables) {
+                    future = future.thenCompose(v -> subscribeToNodeAsync(varNode));
+                }
+                return future;
             });
     }
 
-    private void registerSubscriptionsRecursive(OpcUaNodeDto node) {
+    private void collectVariables(OpcUaNodeDto node, java.util.List<OpcUaNodeDto> list) {
         if ("Variable".equalsIgnoreCase(node.getNodeClass())) {
-            String nodeIdStr = node.getNodeId();
-            NodeId targetNodeId = NodeId.parse(nodeIdStr);
+            list.add(node);
+        }
+        for (OpcUaNodeDto child : node.getChildren()) {
+            collectVariables(child, list);
+        }
+    }
+
+    private CompletableFuture<Void> subscribeToNodeAsync(OpcUaNodeDto node) {
+        String nodeIdStr = node.getNodeId();
+        NodeId targetNodeId = NodeId.parse(nodeIdStr);
+        
+        logger.info("[OPC-UA Wiring] Registering subscription for variable node: {}", nodeIdStr);
+        
+        OpcUaClientApi.SubscriptionParameters params = new OpcUaClientApi.SubscriptionParameters(
+            1000.0, 10, 10, 10, true
+        );
+        
+        return opcUaClient.subscribe(targetNodeId, value -> {
+            Object valObj = value.getValue().getValue();
+            String valStr = valObj != null ? valObj.toString() : "";
             
-            logger.info("[OPC-UA Wiring] Registering subscription for variable node: {}", nodeIdStr);
+            logger.info("[OPC-UA Wiring] Value change detected for node {}: {}", nodeIdStr, valStr);
             
-            OpcUaClientApi.SubscriptionParameters params = new OpcUaClientApi.SubscriptionParameters(
-                1000.0, 10, 10, 10, true
+            OpcUaUpdateMessage update = new OpcUaUpdateMessage(
+                nodeIdStr,
+                valStr,
+                Instant.now().toEpochMilli()
             );
             
-            opcUaClient.subscribe(targetNodeId, value -> {
-                Object valObj = value.getValue().getValue();
-                String valStr = valObj != null ? valObj.toString() : "";
-                
-                logger.info("[OPC-UA Wiring] Value change detected for node {}: {}", nodeIdStr, valStr);
-                
-                OpcUaUpdateMessage update = new OpcUaUpdateMessage(
-                    nodeIdStr,
-                    valStr,
-                    Instant.now().toEpochMilli()
-                );
-                
-                messagingTemplate.convertAndSend("/topic/opcua-tree", update);
-            }, params).thenAccept(handle -> {
-                activeSubscriptions.put(nodeIdStr, handle);
-                logger.info("[OPC-UA Wiring] Subscription activated for: {}", nodeIdStr);
-            }).exceptionally(ex -> {
-                logger.error("[OPC-UA Wiring] Failed to subscribe to node {}: {}", nodeIdStr, ex.getMessage());
-                return null;
-            });
-        }
-
-        for (OpcUaNodeDto child : node.getChildren()) {
-            registerSubscriptionsRecursive(child);
-        }
+            messagingTemplate.convertAndSend("/topic/opcua-tree", update);
+        }, params).thenAccept(handle -> {
+            activeSubscriptions.put(nodeIdStr, handle);
+            logger.info("[OPC-UA Wiring] Subscription activated for: {}", nodeIdStr);
+        }).exceptionally(ex -> {
+            logger.error("[OPC-UA Wiring] Failed to subscribe to node {}: {}", nodeIdStr, ex.getMessage());
+            return null;
+        });
     }
 }
