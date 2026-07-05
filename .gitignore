@@ -23,3 +23,9 @@ tmp/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# MkDocs Kit build outputs
+doc/site/
+doc/man/
+doc/documentation.pdf
+

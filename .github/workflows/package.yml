@@ -65,7 +65,7 @@ jobs:
           apt-get install -y ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
                              libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
                              libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev \
-                             openjdk-21-jdk maven dpkg-dev
+                             openjdk-21-jdk maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
           # Install Node.js v22
           curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
           apt-get install -y nodejs
@@ -77,7 +77,7 @@ jobs:
                          alsa-lib-devel libX11-devel libXrandr-devel libXi-devel \
                          mesa-libGL-devel mesa-libGLU-devel libXcursor-devel libXinerama-devel \
                          gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel \
-                         java-21-openjdk-devel maven rpm-build
+                         java-21-openjdk-devel maven rpm-build python3-pip plantuml pango cairo
           # Install Node.js v22
           curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
           dnf install -y nodejs
@@ -88,7 +88,7 @@ jobs:
           pacman -S --needed --noconfirm \
                          cmake python file \
                          alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
-                         gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm
+                         gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm python-pip plantuml pango cairo
 
       # Build & Package Nunki
       - name: Build Nunki
@@ -173,8 +173,41 @@ EOF
           cp distro-dockerfiles/Dockerfile.nunki dist-packages/
           cp distro-dockerfiles/Dockerfile.quasar dist-packages/
 
+      - name: Checkout MkDocs Kit
+        uses: actions/checkout@v4
+        with:
+          repository: mlecabellec/mkdocs-kit
+          path: mkdocs-kit
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Python dependencies for documentation
+        run: |
+          python3 -m venv .venv-docs
+          .venv-docs/bin/pip install --upgrade pip
+          .venv-docs/bin/pip install "setuptools<82.0.0"
+          .venv-docs/bin/pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
+
+      - name: Build Nunki Documentation
+        run: |
+          PYTHONPATH=$GITHUB_WORKSPACE/mkdocs-kit/src $GITHUB_WORKSPACE/.venv-docs/bin/python3 $GITHUB_WORKSPACE/mkdocs-kit/src/mkdocs_kit/cli.py build
+        working-directory: nunki/doc
+
+      - name: Build Quasar Documentation
+        run: |
+          PYTHONPATH=$GITHUB_WORKSPACE/mkdocs-kit/src $GITHUB_WORKSPACE/.venv-docs/bin/python3 $GITHUB_WORKSPACE/mkdocs-kit/src/mkdocs_kit/cli.py build
+        working-directory: quasar/doc
+
+      - name: Copy Documentation to dist-packages
+        run: |
+          mkdir -p dist-packages/docs-nunki dist-packages/docs-quasar
+          cp nunki/doc/documentation.pdf dist-packages/nunki-documentation.pdf
+          cp -r nunki/doc/site dist-packages/docs-nunki/site
+          cp quasar/doc/documentation.pdf dist-packages/quasar-documentation.pdf
+          cp -r quasar/doc/site dist-packages/docs-quasar/site
+
       - name: Upload Linux Packages & Dockerfiles
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.suffix }}
           path: dist-packages/*
+

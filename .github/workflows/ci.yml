@@ -111,3 +111,58 @@ jobs:
         if: always()
         run: |
           docker compose -f nunki/helpers/docker-compose.yml down
+
+  build-docs:
+    name: Build & Upload Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Checkout MkDocs Kit
+        uses: actions/checkout@v4
+        with:
+          repository: mlecabellec/mkdocs-kit
+          path: mkdocs-kit
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java (required for PlantUML)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System Dependencies (PlantUML, Pango, Cairo)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y plantuml libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libjpeg-dev libopenjp2-7-dev libffi-dev
+
+      - name: Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install "setuptools<82.0.0"
+          pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
+
+      - name: Build Documentation
+        run: |
+          PYTHONPATH=$GITHUB_WORKSPACE/mkdocs-kit/src python3 $GITHUB_WORKSPACE/mkdocs-kit/src/mkdocs_kit/cli.py build
+        working-directory: doc
+
+      - name: Upload Documentation Site Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nunki-docs-site
+          path: doc/site/
+
+      - name: Upload PDF Manual Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nunki-docs-pdf
+          path: doc/documentation.pdf
