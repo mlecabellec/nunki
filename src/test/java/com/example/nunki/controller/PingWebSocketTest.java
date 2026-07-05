@@ -32,6 +32,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 public class PingWebSocketTest {
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.example.nunki.opcua.subscription.SubscriptionManager subscriptionManager;
+
     private static final Logger logger = LoggerFactory.getLogger(PingWebSocketTest.class);
 
     @LocalServerPort
