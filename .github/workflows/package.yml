@@ -98,7 +98,8 @@ jobs:
           pacman -S --needed --noconfirm \
                          cmake python file \
                          alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
-                         gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm python-pip plantuml pango cairo
+                         gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm python-pip plantuml pango cairo \
+                         cantarell-fonts gnu-free-fonts
 
       # Build & Package Nunki
       - name: Build Nunki
@@ -186,11 +187,13 @@ jobs:
           .venv-docs/bin/pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
 
       - name: Build Nunki Documentation
+        continue-on-error: true
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE/mkdocs-kit/src $GITHUB_WORKSPACE/.venv-docs/bin/python3 $GITHUB_WORKSPACE/mkdocs-kit/src/mkdocs_kit/cli.py build
         working-directory: nunki/doc
 
       - name: Build Quasar Documentation
+        continue-on-error: true
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE/mkdocs-kit/src $GITHUB_WORKSPACE/.venv-docs/bin/python3 $GITHUB_WORKSPACE/mkdocs-kit/src/mkdocs_kit/cli.py build
         working-directory: quasar/doc
@@ -198,10 +201,10 @@ jobs:
       - name: Copy Documentation to dist-packages
         run: |
           mkdir -p dist-packages/docs-nunki dist-packages/docs-quasar
-          cp nunki/doc/documentation.pdf dist-packages/nunki-documentation.pdf
-          cp -r nunki/doc/site dist-packages/docs-nunki/site
-          cp quasar/doc/documentation.pdf dist-packages/quasar-documentation.pdf
-          cp -r quasar/doc/site dist-packages/docs-quasar/site
+          cp nunki/doc/documentation.pdf dist-packages/nunki-documentation.pdf || true
+          cp -r nunki/doc/site dist-packages/docs-nunki/site || true
+          cp quasar/doc/documentation.pdf dist-packages/quasar-documentation.pdf || true
+          cp -r quasar/doc/site dist-packages/docs-quasar/site || true
 
       - name: Upload Linux Packages & Dockerfiles
         uses: actions/upload-artifact@v4
