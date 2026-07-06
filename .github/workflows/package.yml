@@ -113,7 +113,7 @@ jobs:
         run: |
           cd quasar
           mkdir -p build-projects
-          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_SHARED_LINKER_FLAGS="-lzstd" -DCMAKE_EXE_LINKER_FLAGS="-lzstd"
           cmake --build build-projects
           ../nunki/helpers/package-quasar.sh ${{ matrix.pkg_type }} ../dist-packages
 
