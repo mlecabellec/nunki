@@ -62,10 +62,17 @@ jobs:
         if: "startsWith(matrix.container, 'debian')"
         run: |
           apt-get update
+          if [ "${{ matrix.container }}" = "debian:bookworm" ]; then
+            echo "deb http://deb.debian.org/debian bookworm-backports main" > /etc/apt/sources.list.d/backports.list
+            apt-get update
+            apt-get install -y -t bookworm-backports openjdk-21-jdk
+          else
+            apt-get install -y openjdk-21-jdk
+          fi
           apt-get install -y ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
                              libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
                              libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev \
-                             openjdk-21-jdk maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
+                             maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
           # Install Node.js v22
           curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
           apt-get install -y nodejs
@@ -77,7 +84,7 @@ jobs:
                          alsa-lib-devel libX11-devel libXrandr-devel libXi-devel \
                          mesa-libGL-devel mesa-libGLU-devel libXcursor-devel libXinerama-devel \
                          gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel \
-                         java-21-openjdk-devel maven rpm-build python3-pip plantuml pango cairo
+                         java-latest-openjdk-devel maven rpm-build python3-pip plantuml pango cairo
           # Install Node.js v22
           curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
           dnf install -y nodejs
@@ -102,7 +109,7 @@ jobs:
         run: |
           cd quasar
           mkdir -p build-projects
-          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release
+          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
           cmake --build build-projects
           ../nunki/helpers/package-quasar.sh ${{ matrix.pkg_type }} ../dist-packages
 
