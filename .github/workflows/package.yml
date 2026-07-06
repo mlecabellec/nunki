@@ -74,7 +74,7 @@ jobs:
           fi
           apt-get install -y ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
                              libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
-                             libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev \
+                             libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev libzstd-dev \
                              maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
           # Install Node.js v22
           curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
@@ -99,7 +99,7 @@ jobs:
                          cmake python file \
                          alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
                          gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm python-pip plantuml pango cairo \
-                         cantarell-fonts gnu-free-fonts
+                         cantarell-fonts gnu-free-fonts zstd
 
       # Build & Package Nunki
       - name: Build Nunki
