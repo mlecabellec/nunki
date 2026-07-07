@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /quasar
-COPY . .
+COPY quasar/ .
 
 # Initialize submodules if any (this might fail if no internet, but let's assume they are there or fetched)
 # RUN git submodule update --init --recursive
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/ccache \
     make -j$(nproc) quasar_opcua quasar_named quasar_coretypes open62541
 
 # Compile the standalone server (from nunki/helpers)
-COPY quasar_server.cpp /quasar/quasar_server.cpp
+COPY nunki/helpers/quasar_server.cpp /quasar/quasar_server.cpp
 RUN g++ -O3 -std=c++20 /quasar/quasar_server.cpp -o /quasar/build/quasar_server \
     -I /quasar/cmake-projects/opcua/include \
     -I /quasar/cmake-projects/named/include \

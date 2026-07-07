@@ -7,6 +7,7 @@ set -e
 TYPE=$1
 OUTPUT_DIR=${2:-"../dist-packages"}
 mkdir -p "$OUTPUT_DIR"
+OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
 
 VERSION="0.0.1"
 RELEASE="1"

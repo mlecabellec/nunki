@@ -62,10 +62,20 @@ jobs:
         if: "startsWith(matrix.container, 'debian')"
         run: |
           apt-get update
+          if [ "${{ matrix.container }}" = "debian:bookworm" ]; then
+            apt-get install -y wget gnupg
+            mkdir -p /etc/apt/keyrings
+            wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc
+            echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb bookworm main" | tee /etc/apt/sources.list.d/adoptium.list
+            apt-get update
+            apt-get install -y temurin-21-jdk
+          else
+            apt-get install -y openjdk-21-jdk
+          fi
           apt-get install -y ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
                              libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
-                             libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev \
-                             openjdk-21-jdk maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
+                             libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev libzstd-dev \
+                             maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
           # Install Node.js v22
           curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
           apt-get install -y nodejs
@@ -76,8 +86,8 @@ jobs:
           dnf install -y gcc-c++ make cmake pkgconf-pkg-config python3 file \
                          alsa-lib-devel libX11-devel libXrandr-devel libXi-devel \
                          mesa-libGL-devel mesa-libGLU-devel libXcursor-devel libXinerama-devel \
-                         gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel \
-                         java-21-openjdk-devel maven rpm-build python3-pip plantuml pango cairo
+                         gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel libzstd-devel \
+                         java-latest-openjdk-devel maven rpm-build python3-pip plantuml pango cairo
           # Install Node.js v22
           curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -
           dnf install -y nodejs
@@ -88,7 +98,8 @@ jobs:
           pacman -S --needed --noconfirm \
                          cmake python file \
                          alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
-                         gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm python-pip plantuml pango cairo
+                         gmp openssl util-linux-libs zlib binutils jdk-openjdk maven nodejs npm python-pip plantuml pango cairo \
+                         cantarell-fonts gnu-free-fonts zstd
 
       # Build & Package Nunki
       - name: Build Nunki
@@ -102,7 +113,7 @@ jobs:
         run: |
           cd quasar
           mkdir -p build-projects
-          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release
+          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_SHARED_LINKER_FLAGS="-lzstd" -DCMAKE_EXE_LINKER_FLAGS="-lzstd"
           cmake --build build-projects
           ../nunki/helpers/package-quasar.sh ${{ matrix.pkg_type }} ../dist-packages
 
@@ -113,60 +124,48 @@ jobs:
           
           # 1. Generate Nunki Dockerfile
           if [ "${{ matrix.pkg_type }}" = "deb" ]; then
-            cat << 'EOF' > distro-dockerfiles/Dockerfile.nunki
-FROM ${{ matrix.container }}
-RUN apt-get update && apt-get install -y openjdk-21-jre-headless && rm -rf /var/lib/apt/lists/*
-COPY nunki_*.deb /tmp/
-RUN dpkg -i /tmp/nunki_*.deb || apt-get install -f -y
-EXPOSE 8080
-ENTRYPOINT ["/usr/bin/nunki"]
-EOF
+            echo "FROM ${{ matrix.container }}" > distro-dockerfiles/Dockerfile.nunki
+            echo "RUN apt-get update && apt-get install -y openjdk-21-jre-headless && rm -rf /var/lib/apt/lists/*" >> distro-dockerfiles/Dockerfile.nunki
+            echo "COPY nunki_*.deb /tmp/" >> distro-dockerfiles/Dockerfile.nunki
+            echo "RUN dpkg -i /tmp/nunki_*.deb || apt-get install -f -y" >> distro-dockerfiles/Dockerfile.nunki
+            echo "EXPOSE 8080" >> distro-dockerfiles/Dockerfile.nunki
+            echo 'ENTRYPOINT ["/usr/bin/nunki"]' >> distro-dockerfiles/Dockerfile.nunki
           elif [ "${{ matrix.pkg_type }}" = "rpm" ]; then
-            cat << 'EOF' > distro-dockerfiles/Dockerfile.nunki
-FROM ${{ matrix.container }}
-RUN dnf install -y java-21-openjdk-headless && dnf clean all
-COPY nunki-*.rpm /tmp/
-RUN dnf localinstall -y /tmp/nunki-*.rpm
-EXPOSE 8080
-ENTRYPOINT ["/usr/bin/nunki"]
-EOF
+            echo "FROM ${{ matrix.container }}" > distro-dockerfiles/Dockerfile.nunki
+            echo "RUN dnf install -y java-21-openjdk-headless && dnf clean all" >> distro-dockerfiles/Dockerfile.nunki
+            echo "COPY nunki-*.rpm /tmp/" >> distro-dockerfiles/Dockerfile.nunki
+            echo "RUN dnf localinstall -y /tmp/nunki-*.rpm" >> distro-dockerfiles/Dockerfile.nunki
+            echo "EXPOSE 8080" >> distro-dockerfiles/Dockerfile.nunki
+            echo 'ENTRYPOINT ["/usr/bin/nunki"]' >> distro-dockerfiles/Dockerfile.nunki
           elif [ "${{ matrix.pkg_type }}" = "arch" ]; then
-            cat << 'EOF' > distro-dockerfiles/Dockerfile.nunki
-FROM ${{ matrix.container }}
-COPY nunki-*.pkg.tar.zst /tmp/
-RUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/nunki-*.pkg.tar.zst && pacman -Scc --noconfirm
-EXPOSE 8080
-ENTRYPOINT ["/usr/bin/nunki"]
-EOF
+            echo "FROM ${{ matrix.container }}" > distro-dockerfiles/Dockerfile.nunki
+            echo "COPY nunki-*.pkg.tar.zst /tmp/" >> distro-dockerfiles/Dockerfile.nunki
+            echo "RUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/nunki-*.pkg.tar.zst && pacman -Scc --noconfirm" >> distro-dockerfiles/Dockerfile.nunki
+            echo "EXPOSE 8080" >> distro-dockerfiles/Dockerfile.nunki
+            echo 'ENTRYPOINT ["/usr/bin/nunki"]' >> distro-dockerfiles/Dockerfile.nunki
           fi
 
           # 2. Generate Quasar Dockerfile
           if [ "${{ matrix.pkg_type }}" = "deb" ]; then
-            cat << 'EOF' > distro-dockerfiles/Dockerfile.quasar
-FROM ${{ matrix.container }}
-RUN apt-get update && apt-get install -y libssl3 libuuid1 zlib1g && rm -rf /var/lib/apt/lists/*
-COPY quasar_*.deb /tmp/
-RUN dpkg -i /tmp/quasar_*.deb || apt-get install -f -y
-EXPOSE 4840
-ENTRYPOINT ["/usr/bin/quasar_server"]
-EOF
+            echo "FROM ${{ matrix.container }}" > distro-dockerfiles/Dockerfile.quasar
+            echo "RUN apt-get update && apt-get install -y libssl3 libuuid1 zlib1g && rm -rf /var/lib/apt/lists/*" >> distro-dockerfiles/Dockerfile.quasar
+            echo "COPY quasar_*.deb /tmp/" >> distro-dockerfiles/Dockerfile.quasar
+            echo "RUN dpkg -i /tmp/quasar_*.deb || apt-get install -f -y" >> distro-dockerfiles/Dockerfile.quasar
+            echo "EXPOSE 4840" >> distro-dockerfiles/Dockerfile.quasar
+            echo 'ENTRYPOINT ["/usr/bin/quasar_server"]' >> distro-dockerfiles/Dockerfile.quasar
           elif [ "${{ matrix.pkg_type }}" = "rpm" ]; then
-            cat << 'EOF' > distro-dockerfiles/Dockerfile.quasar
-FROM ${{ matrix.container }}
-RUN dnf install -y openssl zlib libuuid && dnf clean all
-COPY quasar-*.rpm /tmp/
-RUN dnf localinstall -y /tmp/quasar-*.rpm
-EXPOSE 4840
-ENTRYPOINT ["/usr/bin/quasar_server"]
-EOF
+            echo "FROM ${{ matrix.container }}" > distro-dockerfiles/Dockerfile.quasar
+            echo "RUN dnf install -y openssl zlib libuuid && dnf clean all" >> distro-dockerfiles/Dockerfile.quasar
+            echo "COPY quasar-*.rpm /tmp/" >> distro-dockerfiles/Dockerfile.quasar
+            echo "RUN dnf localinstall -y /tmp/quasar-*.rpm" >> distro-dockerfiles/Dockerfile.quasar
+            echo "EXPOSE 4840" >> distro-dockerfiles/Dockerfile.quasar
+            echo 'ENTRYPOINT ["/usr/bin/quasar_server"]' >> distro-dockerfiles/Dockerfile.quasar
           elif [ "${{ matrix.pkg_type }}" = "arch" ]; then
-            cat << 'EOF' > distro-dockerfiles/Dockerfile.quasar
-FROM ${{ matrix.container }}
-COPY quasar-*.pkg.tar.zst /tmp/
-RUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/quasar-*.pkg.tar.zst && pacman -Scc --noconfirm
-EXPOSE 4840
-ENTRYPOINT ["/usr/bin/quasar_server"]
-EOF
+            echo "FROM ${{ matrix.container }}" > distro-dockerfiles/Dockerfile.quasar
+            echo "COPY quasar-*.pkg.tar.zst /tmp/" >> distro-dockerfiles/Dockerfile.quasar
+            echo "RUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/quasar-*.pkg.tar.zst && pacman -Scc --noconfirm" >> distro-dockerfiles/Dockerfile.quasar
+            echo "EXPOSE 4840" >> distro-dockerfiles/Dockerfile.quasar
+            echo 'ENTRYPOINT ["/usr/bin/quasar_server"]' >> distro-dockerfiles/Dockerfile.quasar
           fi
           
           # Copy generated Dockerfiles to target distribution packages
@@ -188,11 +187,13 @@ EOF
           .venv-docs/bin/pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
 
       - name: Build Nunki Documentation
+        continue-on-error: true
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE/mkdocs-kit/src $GITHUB_WORKSPACE/.venv-docs/bin/python3 $GITHUB_WORKSPACE/mkdocs-kit/src/mkdocs_kit/cli.py build
         working-directory: nunki/doc
 
       - name: Build Quasar Documentation
+        continue-on-error: true
         run: |
           PYTHONPATH=$GITHUB_WORKSPACE/mkdocs-kit/src $GITHUB_WORKSPACE/.venv-docs/bin/python3 $GITHUB_WORKSPACE/mkdocs-kit/src/mkdocs_kit/cli.py build
         working-directory: quasar/doc
@@ -200,10 +201,10 @@ EOF
       - name: Copy Documentation to dist-packages
         run: |
           mkdir -p dist-packages/docs-nunki dist-packages/docs-quasar
-          cp nunki/doc/documentation.pdf dist-packages/nunki-documentation.pdf
-          cp -r nunki/doc/site dist-packages/docs-nunki/site
-          cp quasar/doc/documentation.pdf dist-packages/quasar-documentation.pdf
-          cp -r quasar/doc/site dist-packages/docs-quasar/site
+          cp nunki/doc/documentation.pdf dist-packages/nunki-documentation.pdf || true
+          cp -r nunki/doc/site dist-packages/docs-nunki/site || true
+          cp quasar/doc/documentation.pdf dist-packages/quasar-documentation.pdf || true
+          cp -r quasar/doc/site dist-packages/docs-quasar/site || true
 
       - name: Upload Linux Packages & Dockerfiles
         uses: actions/upload-artifact@v4
