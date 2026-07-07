@@ -1,0 +1,25 @@
+@startsalt
+{
+  == Process Synoptics
+  Interactive process flow diagrams linked with dynamic sensor states
+  .
+  { [Start Pump] | [Open Valve] | Tank Level: 45% [======o-----] }
+  .
+  {^SVG Mimic Canvas^
+    {
+      Inlet Pipeline       | Storage Tank T-101     | Outlet Pipeline
+      {                    | {                      | {
+        +-----------------+ |   +---------------+    |   +-----------------+
+        |                 | |   |               |    |   |                 |
+        | (O) Feed Pump   | |   | ~~~~~~~~~~~~~ |    |   | |X| Drain Valve |
+        |   [Running]     | |   |    (45.0%)    |    |   |   [Closed]      |
+        |                 | |   |               |    |   |                 |
+        +-----------------+ |   |               |    |   +-----------------+
+                            |   |               |    |
+                            |   |    0%..100%   |    |
+                            |   +---------------+    |
+      }                    | }                      | }
+    }
+  }
+}
+@endsalt

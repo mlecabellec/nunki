@@ -1,13 +1,41 @@
-plugins:
-- search
 site_name: Nunki Documentation
+use_directory_urls: false
+plugins:
+  - search
+
 theme:
-  features:
-  - navigation.tabs
-  - navigation.sections
-  - toc.integrate
   name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
   palette:
     accent: indigo
     primary: indigo
     scheme: slate
+
+nav:
+  - Welcome: index.md
+  - Topics Index: topics_index.md
+  - Project Rules:
+      - Rules Index: architecture/rules_index.md
+      - "CS-0010 Quality Standards": architecture/CS-0010.md
+      - "CS-0020 AI Agent Rules": architecture/CS-0020.md
+      - "CS-0030 Java Coding Rules": architecture/CS-0030.md
+  - Architecture:
+      - Architecture Index: architecture/architecture_index.md
+      - OPC-UA Integration: architecture/OPCUA-Integration.md
+      - Svelte Frontend Architecture: architecture/Svelte-Frontend.md
+      - Svelte Component Analysis: architecture/Svelte-Frontend-Analysis.md
+      - Svelte Component Wireframes: architecture/Svelte-Component-Wireframes.md
+  - Components Register:
+      - Components Index: architecture/components_index.md
+  - Requirements & Guides:
+      - Requirements: misc/requirements.md
+      - Frontend README: src/main/frontend/README.md
+      - Developer Helpers: helpers/HELPERS.md
+  - Architecture Decision Records (ADRs):
+      - Mockito Design: docs/DESIGN.md
+      - "ADR-0010: Introduce Mockito": docs/adr/ADR-0010.md
+  - Reports:
+      - Initialization Report: reports/INITIALIZATION_REPORT.md

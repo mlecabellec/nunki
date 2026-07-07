@@ -1,0 +1,22 @@
+@startsalt
+{
+  == OPC-UA Address Space
+  Interactive view of active nodes, folders and attributes
+  .
+  [Refresh Address Space]
+  .
+  {T
+   + 📁 Root (ns=0;i=84)
+   ++ 📁 Data (ns=1;s=Data)
+   +++ 🔢 MyInt (ns=1;s=Data/MyInt) = 42                                  | [Edit]
+   +++ 🔢 MySwitch (ns=1;s=Data/MySwitch) = False                          | [Edit]
+   +++ 🔢 PumpRunning (ns=1;s=Data/PumpRunning) = False                    | [Edit]
+   +++ 🔢 TankLevel (ns=1;s=Data/TankLevel) = 45.0                         | [Edit]
+   ++ 📁 CounterControl (ns=1;s=CounterControl)
+   +++ 🔢 CounterValue (ns=1;s=CounterControl/CounterValue) = 0            | [Edit]
+   ++ 📁 FastCounters (ns=1;s=FastCounters)
+   +++ 🔢 Counter_1Hz (ns=1;s=FastCounters/Counter_1Hz) = 15              | [Edit]
+   ++ ⚡ ResetCounter() (ns=1;s=ResetCounter)                               | [Invoke]
+  }
+}
+@endsalt

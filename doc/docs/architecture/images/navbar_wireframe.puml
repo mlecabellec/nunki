@@ -1,0 +1,29 @@
+@startsalt
+{
+  { [N] Nunki Dashboard | [Workbenches v] | | | | | | | | | | | | | | | | | | | | | [User v] }
+  {
+    .
+    {
+      + Workbenches Dropdown Menu
+      --
+      [Logs]
+      [Charts]
+      [Synoptics]
+      {
+        [Values                >]
+        {
+          [List view]
+          [Search view]
+          [Tree view]
+        }
+      }
+      {
+        [Automation            >]
+        {
+          [Lua scripting]
+        }
+      }
+    }
+  }
+}
+@endsalt

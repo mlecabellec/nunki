@@ -29,3 +29,7 @@ doc/site/
 doc/man/
 doc/documentation.pdf
 
+# Cache directory
+.cache/
+
+

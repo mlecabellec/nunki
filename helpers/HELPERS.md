@@ -47,6 +47,24 @@ This script manages the multi-container integrated environment (Quasar OPC UA C+
 ./helpers/run-integrated.sh down
 ```
 
+## 3. Documentation Builder (`build-docs.sh`)
+
+This script verifies dependencies, compiles PlantUML wireframe diagrams to PNG assets, and runs `mkdocs-kit` to compile the documentation to HTML and PDF.
+
+```bash
+# Display help and options
+./helpers/build-docs.sh --help
+
+# Build the documentation (default)
+./helpers/build-docs.sh build
+
+# Start a local preview server with live HMR
+./helpers/build-docs.sh serve
+
+# Clean all build artifacts and compiled diagram images
+./helpers/build-docs.sh clean
+```
+
 ## Services
 - **Quasar (OPC UA Server)**: Exposed on port `4840`.
 - **Nunki (Spring Boot App)**: Exposed on port `8080` (or host-configured port).
