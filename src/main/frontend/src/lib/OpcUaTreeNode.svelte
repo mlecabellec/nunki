@@ -28,7 +28,7 @@
   }
 
   // Define component props using Svelte 5 `$props` rune
-  let { node, parentId = '' } = $props<{ node: OpcUaNode; parentId?: string }>();
+  let { node, parentId = '', isLoggedIn = false } = $props<{ node: OpcUaNode; parentId?: string; isLoggedIn?: boolean }>();
 
   // ==========================================
   // --- LOCAL Runes STATE PROPERTIES ---
@@ -196,7 +196,9 @@
           </button>
         </div>
       {:else}
-        <button class="btn-action edit" onclick={startEditing}>Edit</button>
+        {#if isLoggedIn}
+          <button class="btn-action edit" onclick={startEditing}>Edit</button>
+        {/if}
       {/if}
     {:else if node.nodeClass === 'Method'}
       <!-- METHOD: Execution control deck -->
@@ -205,7 +207,7 @@
       <span class="node-id mono text-muted">{node.nodeId}</span>
       
       <div class="method-actions">
-        <button class="btn-action invoke" onclick={handleInvoke} disabled={isInvoking}>
+        <button class="btn-action invoke" onclick={handleInvoke} disabled={isInvoking || !isLoggedIn}>
           {isInvoking ? 'Executing...' : 'Invoke'}
         </button>
         {#if invokeResult !== null}
@@ -221,7 +223,7 @@
   {#if node.nodeClass === 'Object' && isOpen && node.children && node.children.length > 0}
     <div class="node-children">
       {#each node.children as child}
-        <OpcUaTreeNode node={child} parentId={node.nodeId} />
+        <OpcUaTreeNode node={child} parentId={node.nodeId} {isLoggedIn} />
       {/each}
     </div>
   {/if}

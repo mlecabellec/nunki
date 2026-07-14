@@ -57,6 +57,10 @@
 #include "quasar/named/NamedString.hpp"
 #include "quasar/named/NamedMethod.hpp"
 #include "quasar/opcua/OpcUaServerService.hpp"
+#include "quasar/scripting/LuaEngine.hpp"
+#include "quasar/scripting/LuaProxy.hpp"
+#include "quasar/scripting/RegistryBindings.hpp"
+#include <jsoncons/json.hpp>
 
 #include <chrono>
 #include <csignal>
@@ -470,6 +474,164 @@ static void buildLegacyData(std::shared_ptr<NamedObject> root) {
             std::string stateStr = newState ? "True" : "False";
             std::cout << "[Data] ToggleSwitch: MySwitch = " << stateStr << "\n";
             return NamedString::create("Result", stateStr, nullptr);
+        },
+        data);
+
+    // Register the ExecuteScript method.
+    // This method takes a NamedString representing the Lua code, executes it
+    // within a safe sandboxed C++ LuaEngine, and returns logs/status.
+    NamedMethod::create(
+        "ExecuteScript",
+        [root](std::shared_ptr<NamedObject> /*owner*/,
+               std::shared_ptr<NamedObject> args)
+            -> std::shared_ptr<NamedObject> {
+            // Check for valid arguments input.
+            if (args == nullptr) {
+                return NamedString::create("Result", "Error: No arguments provided.", nullptr);
+            }
+            
+            // Cast parameters explicitly to NamedString.
+            std::shared_ptr<NamedString> scriptNode = std::dynamic_pointer_cast<NamedString>(args);
+            if (scriptNode == nullptr) {
+                return NamedString::create("Result", "Error: Expected NamedString argument.", nullptr);
+            }
+            
+            // Extract the Lua code string.
+            std::string luaCode = scriptNode->value();
+            
+            // Instantiate the isolated Lua runtime container.
+            std::shared_ptr<quasar::scripting::LuaEngine> engine = quasar::scripting::LuaEngine::create();
+            sol::state& lua = engine->getState();
+            
+            // Expose the Root object of the NamedObject tree to Lua.
+            lua["root"] = quasar::scripting::LuaProxy<NamedObject>(root);
+            
+            // Standard read/write OPC-UA wrappers for the Lua script.
+            std::string wrapper = R"LUA(
+                opcua = {}
+                opcua.read = function(nodeId)
+                    local path = string.match(nodeId, "s=([^;]+)")
+                    if not path then path = nodeId end
+                    if string.sub(path, 1, 5) == "Root/" then
+                        path = string.sub(path, 6)
+                    end
+                    local node = quasar.resolve(root, path)
+                    if not node then
+                        error("Node not found: " .. tostring(path))
+                    end
+                    local type = node:getType()
+                    if type == "NamedLong" or type == "NamedInteger" or type == "NamedInteger<int32_t>" or type == "NamedInteger<int64_t>" then
+                        return node:asLong():value()
+                    elseif type == "NamedULong" then
+                        return node:asULong():value()
+                    elseif type == "NamedDouble" then
+                        return node:asDouble():value()
+                    elseif type == "NamedFloat" then
+                        return node:asFloat():value()
+                    elseif type == "NamedBoolean" then
+                        return node:asBoolean():value()
+                    elseif type == "NamedString" then
+                        return node:asString():value()
+                    else
+                        local success, val = pcall(function() return node:asLong():value() end)
+                        if success then return val end
+                        success, val = pcall(function() return node:asBoolean():value() end)
+                        if success then return val end
+                        success, val = pcall(function() return node:asString():value() end)
+                        if success then return val end
+                        error("Unsupported node type: " .. tostring(type))
+                    end
+                end
+
+                opcua.write = function(nodeId, value)
+                    local path = string.match(nodeId, "s=([^;]+)")
+                    if not path then path = nodeId end
+                    if string.sub(path, 1, 5) == "Root/" then
+                        path = string.sub(path, 6)
+                    end
+                    local node = quasar.resolve(root, path)
+                    if not node then
+                        error("Node not found: " .. tostring(path))
+                    end
+                    local type = node:getType()
+                    if type == "NamedLong" or type == "NamedInteger" or type == "NamedInteger<int32_t>" or type == "NamedInteger<int64_t>" then
+                        node:asLong():setValue(value)
+                    elseif type == "NamedULong" then
+                        node:asULong():setValue(value)
+                    elseif type == "NamedDouble" then
+                        node:asDouble():setValue(value)
+                    elseif type == "NamedFloat" then
+                        node:asFloat():setValue(value)
+                    elseif type == "NamedBoolean" then
+                        node:asBoolean():setValue(value)
+                    elseif type == "NamedString" then
+                        node:asString():setValue(value)
+                    else
+                        local success = pcall(function() node:asLong():setValue(value) end)
+                        if not success then
+                            success = pcall(function() node:asBoolean():setValue(value) end)
+                        end
+                        if not success then
+                            success = pcall(function() node:asString():setValue(value) end)
+                        end
+                        if not success then
+                            error("Unsupported node type for write: " .. tostring(type))
+                        end
+                    end
+                end
+            )LUA";
+            
+            // Execute the wrapper to initialize the OPC UA client emulation environment.
+            engine->executeString(wrapper);
+            
+            // Wrap user script to override print and capture standard output.
+            std::string userCodeWrapper = R"LUA(
+                local _logs = {}
+                local _old_print = print
+                local print = function(...)
+                    local args = {...}
+                    local str = ""
+                    for i = 1, #args do
+                        str = str .. (i > 1 and "\t" or "") .. tostring(args[i])
+                    end
+                    table.insert(_logs, str)
+                end
+                
+                _G.print = print
+
+                local _status, _res = pcall(function()
+)LUA" + luaCode + R"LUA(
+                end)
+                
+                return _status, tostring(_res), _logs
+            )LUA";
+            
+            // Execute the wrapped user script and check execution results.
+            sol::protected_function_result result = engine->executeString(userCodeWrapper);
+            if (!result.valid()) {
+                sol::error err = result;
+                return NamedString::create("Result", "Execution failed: " + std::string(err.what()), nullptr);
+            }
+            
+            // Extract unpacked result variables.
+            bool status = result.get<bool>(0);
+            std::string errorOrResult = result.get<std::string>(1);
+            sol::table logs = result.get<sol::table>(2);
+            
+            // Construct the final output JSON response envelope.
+            jsoncons::json responseJson;
+            responseJson["success"] = status;
+            responseJson["result"] = errorOrResult;
+            
+            // Collect the captured print log statements.
+            jsoncons::json logsArray = jsoncons::json::array();
+            for (size_t i = 1; i <= logs.size(); ++i) {
+                logsArray.push_back(logs.get<std::string>(i));
+            }
+            responseJson["logs"] = logsArray;
+            
+            // Return output JSON string wrapped in a NamedString object.
+            return NamedString::create("Result", responseJson.to_string(), nullptr);
         },
         data);
 

@@ -161,7 +161,8 @@ done
 # Wrapper function to execute compose in the helpers folder
 run_compose() {
     if [ -d "$QUASAR_DIR" ]; then
-        cp "$SCRIPT_DIR/quasar_server.cpp" "$QUASAR_DIR/quasar_server.cpp"
+        mkdir -p "$QUASAR_DIR/quasar_server"
+        cp -r "$ROOT_DIR/quasar_server/"* "$QUASAR_DIR/quasar_server/"
     fi
     local exit_code=0
     (
@@ -169,7 +170,7 @@ run_compose() {
         $COMPOSE_CMD "$@"
     ) || exit_code=$?
     if [ -d "$QUASAR_DIR" ]; then
-        rm -f "$QUASAR_DIR/quasar_server.cpp"
+        rm -rf "$QUASAR_DIR/quasar_server"
     fi
     return $exit_code
 }

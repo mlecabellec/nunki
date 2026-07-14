@@ -3,8 +3,8 @@ version: '3.8'
 services:
   quasar:
     build:
-      context: ../../
-      dockerfile: nunki/helpers/quasar.Dockerfile
+      context: ../../quasar
+      dockerfile: ../nunki/helpers/quasar.Dockerfile
     image: nunki/quasar:latest
     container_name: quasar-server
     ports:

@@ -61,6 +61,23 @@ export class WebSocketManager {
    * Handles frame transmission, heartbeat parsing, and message queues.
    */
   private client: Client | null = null;
+
+  /**
+   * Stored authorization header for Basic Auth.
+   */
+  authHeader = $state<string | null>(null);
+
+  setAuthHeader(header: string | null) {
+    this.authHeader = header;
+  }
+
+  getHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = { ...customHeaders };
+    if (this.authHeader) {
+      headers['Authorization'] = this.authHeader;
+    }
+    return headers;
+  }
   
   // ==========================================
   // --- SVELTE 5 REACTIVE Runes STATES ---
@@ -228,7 +245,7 @@ export class WebSocketManager {
       console.log(`[REST] Dispatching Write request for Node '${nodeId}' -> Value: '${value}' (${type})`);
       const response = await fetch(getApiUrl('/api/opcua/write'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ nodeId, value, type })
       });
       if (!response.ok) {
@@ -257,7 +274,7 @@ export class WebSocketManager {
       console.log(`[REST] Dispatching Invoke request for Method '${methodId}' (Parent: '${objectId}')`);
       const response = await fetch(getApiUrl('/api/opcua/invoke'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: this.getHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ objectId, methodId, arguments: args })
       });
       if (!response.ok) {

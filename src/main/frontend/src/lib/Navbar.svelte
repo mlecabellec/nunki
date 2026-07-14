@@ -41,7 +41,8 @@
   // --- Component Props Schema ---
   // - `onSelect`: Callback function dispatched to propagate navigation actions to App.svelte.
   // - `currentTab`: String code representing the active visible workbench tab.
-  let { onSelect, currentTab }: { onSelect: (tab: string) => void; currentTab: string } = $props();
+  // - `isLoggedIn`: Boolean indicating if user is authenticated.
+  let { onSelect, currentTab, isLoggedIn = false }: { onSelect: (tab: string) => void; currentTab: string; isLoggedIn?: boolean } = $props();
 
   // --- Svelte 5 Local Runes States ---
   // Caches which main category dropdown is expanded ('workbenches', 'user', or null if closed)
@@ -232,21 +233,24 @@
           
           {#if openDropdown === 'user'}
             <div class="dropdown-menu right-align">
-              <!-- Log In Trigger -->
-              <button class="dropdown-item" onclick={(e) => handleSelect('login', e)}>
-                <LogIn size={14} />
-                <span>Log in</span>
-              </button>
-              <!-- Log Out Trigger -->
-              <button class="dropdown-item" onclick={(e) => handleSelect('logout', e)}>
-                <LogOut size={14} />
-                <span>Log out</span>
-              </button>
-              <!-- Profile details trigger -->
-              <button class="dropdown-item" onclick={(e) => handleSelect('profile', e)}>
-                <Settings size={14} />
-                <span>Profile</span>
-              </button>
+              {#if !isLoggedIn}
+                <!-- Log In Trigger -->
+                <button class="dropdown-item" onclick={(e) => handleSelect('login', e)}>
+                  <LogIn size={14} />
+                  <span>Log in</span>
+                </button>
+              {:else}
+                <!-- Profile details trigger -->
+                <button class="dropdown-item" onclick={(e) => handleSelect('profile', e)}>
+                  <Settings size={14} />
+                  <span>Profile</span>
+                </button>
+                <!-- Log Out Trigger -->
+                <button class="dropdown-item" onclick={(e) => handleSelect('logout', e)}>
+                  <LogOut size={14} />
+                  <span>Log out</span>
+                </button>
+              {/if}
             </div>
           {/if}
         </div>

@@ -22,11 +22,13 @@
   let {
     pumpRunningNodeId = '',
     valveOpenNodeId = '',
-    tankLevelNodeId = ''
+    tankLevelNodeId = '',
+    isLoggedIn = false
   } = $props<{
     pumpRunningNodeId?: string;
     valveOpenNodeId?: string;
     tankLevelNodeId?: string;
+    isLoggedIn?: boolean;
   }>();
 
   // --- Dynamic Simulator State Variables (Derived from real OPC-UA node states) ---
@@ -58,18 +60,21 @@
 
   // Dispatch real OPC-UA write actions via REST endpoints
   async function togglePump() {
+    if (!isLoggedIn) return;
     if (!pumpRunningNodeId) return;
     const nextState = !pumpRunning;
     await wsManager.writeOpcUaValue(pumpRunningNodeId, String(nextState), 'Boolean');
   }
 
   async function toggleValve() {
+    if (!isLoggedIn) return;
     if (!valveOpenNodeId) return;
     const nextState = !valveOpen;
     await wsManager.writeOpcUaValue(valveOpenNodeId, String(nextState), 'Boolean');
   }
 
   async function handleSliderChange(valStr: string) {
+    if (!isLoggedIn) return;
     if (!tankLevelNodeId) return;
     await wsManager.writeOpcUaValue(tankLevelNodeId, valStr, 'Double');
   }
@@ -94,19 +99,19 @@
   <!-- Top Simulator Control Deck -->
   <div class="controls">
     <!-- Toggle Feed Pump State -->
-    <button onclick={togglePump} class:active={pumpRunning}>
+    <button onclick={togglePump} class:active={pumpRunning} disabled={!isLoggedIn}>
       {pumpRunning ? 'Stop Pump' : 'Start Pump'}
     </button>
     
     <!-- Toggle Drain Valve State -->
-    <button onclick={toggleValve} class:active={valveOpen}>
+    <button onclick={toggleValve} class:active={valveOpen} disabled={!isLoggedIn}>
       {valveOpen ? 'Close Valve' : 'Open Valve'}
     </button>
     
     <!-- Manual Level Override Slider -->
     <div class="level-control">
       <label for="tank-level-slider">Tank Level: {tankLevel.toFixed(0)}%</label>
-      <input id="tank-level-slider" type="range" min="0" max="100" value={tankLevel} oninput={(e) => handleSliderChange(e.currentTarget.value)} />
+      <input id="tank-level-slider" type="range" min="0" max="100" value={tankLevel} oninput={(e) => handleSliderChange(e.currentTarget.value)} disabled={!isLoggedIn} />
     </div>
   </div>
 
@@ -176,13 +181,13 @@
            ========================================== -->
       <!-- Bounded key handlers and accessibility traits map standard keyboard interactions -->
       <g transform="translate(550, 300)" 
-         onclick={toggleValve} 
-         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { toggleValve(); e.preventDefault(); } }}
+         onclick={() => { if (isLoggedIn) toggleValve(); }} 
+         onkeydown={(e) => { if (isLoggedIn && (e.key === 'Enter' || e.key === ' ')) { toggleValve(); e.preventDefault(); } }}
          role="button"
-         tabindex="0"
+         tabindex={isLoggedIn ? 0 : -1}
          aria-label="Drain Valve Toggle"
          class="valve-group" 
-         style="cursor: pointer; outline: none;">
+         style="cursor: {isLoggedIn ? 'pointer' : 'default'}; outline: none;">
         <!-- Hourglass instrument symbol: filled with status colors (green = open; red = closed) -->
         <path d="M -20 -15 L 20 15 L 20 -15 L -20 15 Z" fill={valveOpen ? '#48bb78' : '#e53e3e'} stroke="#cbd5e0" stroke-width="2" />
         <!-- Center connection bolt -->

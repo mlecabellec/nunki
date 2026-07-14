@@ -3,7 +3,7 @@
    * @file App.svelte
    * @description Main dashboard application shell for Nunki Control Panel.
    * Orchestrates the active views (logs, charting, diagrams, OPC-UA registers)
-   * and houses mock models, Lua scripting emulation, and socket event callbacks.
+   * and houses OPC-UA node models, Lua scripting execution, and socket event callbacks.
    * 
    * Requirements:
    * - REQ-00014: WebSocket/STOMP async exchanges
@@ -41,14 +41,14 @@
   // Tracks active account management modals ('login', 'logout', 'profile', or null)
   let userAction = $state<string | null>(null);
   
-  // Username for mock login flow
+  // Username for authentication flow
   let loginUsername = $state('admin');
   
-  // Password for mock login flow
+  // Password for authentication flow
   let loginPassword = $state('admin');
   
-  // Simulated authentication state
-  let isLoggedIn = $state(true);
+  // Authentication state
+  let isLoggedIn = $state(false);
 
   // Schema interface representing an OPC-UA tree structure
   interface OpcUaNode {
@@ -119,7 +119,9 @@
     isFetchingTree = true;
     treeFetchError = null;
     try {
-      const response = await fetch(getApiUrl('/api/opcua/tree'));
+      const response = await fetch(getApiUrl('/api/opcua/tree'), {
+        headers: wsManager.getHeaders()
+      });
       if (!response.ok) {
         throw new Error('Server returned ' + response.status);
       }
@@ -257,6 +259,13 @@ end`);
 
   // Connect STOMP websockets on layout mount
   onMount(() => {
+    const savedAuth = localStorage.getItem('nunki_auth');
+    if (savedAuth) {
+      isLoggedIn = true;
+      wsManager.setAuthHeader(savedAuth);
+    } else {
+      isLoggedIn = false;
+    }
     wsManager.connect();
     fetchOpcUaTree();
   });
@@ -309,18 +318,37 @@ end`);
   }
 
   /**
-   * Mock authenticator sign-in submission handler.
+   * Authenticator sign-in submission handler.
    */
-  function handleLogin() {
-    isLoggedIn = true;
-    userAction = null;
+  async function handleLogin() {
+    const header = 'Basic ' + btoa(loginUsername + ':' + loginPassword);
+    try {
+      const response = await fetch(getApiUrl('/api/opcua/tree'), {
+        headers: { 'Authorization': header }
+      });
+      if (response.status === 401) {
+        alert('Invalid username or password.');
+        isLoggedIn = false;
+      } else {
+        isLoggedIn = true;
+        localStorage.setItem('nunki_auth', header);
+        wsManager.setAuthHeader(header);
+        userAction = null;
+        fetchOpcUaTree();
+      }
+    } catch (err) {
+      console.error('Login failed:', err);
+      alert('Failed to connect to the authentication backend.');
+    }
   }
 
   /**
-   * Mock authenticator sign-out handler.
+   * Authenticator sign-out handler.
    */
   function handleLogout() {
     isLoggedIn = false;
+    localStorage.removeItem('nunki_auth');
+    wsManager.setAuthHeader(null);
     userAction = null;
   }
 
@@ -365,32 +393,69 @@ end`);
   }
 
   /**
-   * Simulates Lua sandbox engine runtime execution.
-   * Feeds outputs directly onto console buffer display window.
+   * Invokes the real Lua execution engine on the Quasar backend server.
+   * Feeds outputs directly onto the console buffer display window.
    */
-  function runLuaScript() {
+  async function runLuaScript() {
     isRunningLua = true;
-    luaConsoleLogs = ["Initializing Lua engine v5.4...", "Connecting to OPC-UA address space..."];
-    setTimeout(() => {
-      luaConsoleLogs = [...luaConsoleLogs, "Running automation script..."];
-    }, 400);
-    setTimeout(() => {
-      // FIX: Cast string/number value to a reliable integer to resolve compiler operations
-      const targetInt = Number(nodeValues.find(n => n.name === 'MyInt')?.value ?? 42);
+    luaConsoleLogs = ["[Console] Initializing Lua engine...", "[OPC-UA] Invoking ExecuteScript on Quasar backend..."];
+    
+    // Construct the input NamedString argument in JSON form
+    const jsonArg = JSON.stringify({
+      name: "script",
+      type: "NamedString",
+      value: luaCode
+    });
+
+    try {
+      const response = await wsManager.invokeOpcUaMethod(
+        "ns=1;s=Data",
+        "ns=1;s=Data/ExecuteScript",
+        [jsonArg]
+      );
+      
+      if (response.success && response.result) {
+        try {
+          const parsed = JSON.parse(response.result);
+          let logs = [];
+          if (parsed.logs && Array.isArray(parsed.logs)) {
+            logs = parsed.logs;
+          }
+          if (parsed.success) {
+            luaConsoleLogs = [
+              ...luaConsoleLogs,
+              ...logs,
+              `[Result] ${parsed.result}`,
+              "Execution complete. (exit code: 0)"
+            ];
+          } else {
+            luaConsoleLogs = [
+              ...luaConsoleLogs,
+              ...logs,
+              `[Error] Runtime error: ${parsed.result}`,
+              "Execution failed."
+            ];
+          }
+        } catch (e) {
+          luaConsoleLogs = [
+            ...luaConsoleLogs,
+            `[Error] Failed to parse backend result JSON: ${response.result}`
+          ];
+        }
+      } else {
+        luaConsoleLogs = [
+          ...luaConsoleLogs,
+          `[Error] Remote execution failed: ${response.result || 'No response details'}`
+        ];
+      }
+    } catch (err) {
       luaConsoleLogs = [
-        ...luaConsoleLogs, 
-        `[OPC-UA] Read value of 'ns=1;s=Data/MyInt' -> ${targetInt}`,
-        `[Console] Current value of MyInt: ${targetInt}`,
-        ...(targetInt > 40 ? [
-          "[OPC-UA] Writing value 'false' to 'ns=1;s=Data/MySwitch'...",
-          "[Console] Switch turned OFF"
-        ] : [
-          "[Console] Value is below threshold (40), no actions taken."
-        ]),
-        "Execution complete. (exit code: 0)"
+        ...luaConsoleLogs,
+        `[Error] REST invocation exception: ${err}`
       ];
+    } finally {
       isRunningLua = false;
-    }, 1000);
+    }
   }
 </script>
 
@@ -402,7 +467,7 @@ end`);
 -->
 <div class="app-layout">
   <!-- Top navigation bar, dispatching selection events reactively to handleNavbarSelect -->
-  <Navbar onSelect={handleNavbarSelect} currentTab={activeTab} />
+  <Navbar onSelect={handleNavbarSelect} currentTab={activeTab} {isLoggedIn} />
 
   <!-- Scrollable main panel content area -->
   <main class="main-content">
@@ -425,7 +490,7 @@ end`);
           <!-- Manual ping string dispatcher -->
           <div class="input-group">
             <input type="text" bind:value={pingText} placeholder="Enter ping text" />
-            <button onclick={sendPing} disabled={!wsManager.connected} class="btn-send">
+            <button onclick={sendPing} disabled={!wsManager.connected || !isLoggedIn} class="btn-send">
               <Send size={16} />
               <span>Send Ping</span>
             </button>
@@ -434,7 +499,7 @@ end`);
           <div class="divider"><span>OR</span></div>
 
           <!-- Automated background 2-second ping toggle button -->
-          <button onclick={toggleAutoPing} class="btn-auto-ping" class:active={autoPingActive} disabled={!wsManager.connected}>
+          <button onclick={toggleAutoPing} class="btn-auto-ping" class:active={autoPingActive} disabled={!wsManager.connected || !isLoggedIn}>
             {#if autoPingActive}
               <Square size={16} fill="white" />
               <span>Stop 2s Auto Ping</span>
@@ -488,6 +553,7 @@ end`);
           pumpRunningNodeId={pathNodeIds['Data/PumpRunning']}
           valveOpenNodeId={pathNodeIds['Data/MySwitch']}
           tankLevelNodeId={pathNodeIds['Data/TankLevel']}
+          {isLoggedIn}
         />
       </div>
 
@@ -529,7 +595,7 @@ end`);
             </tr>
           </thead>
           <tbody>
-            <!-- Simple tag matrix listing mock values -->
+            <!-- Simple tag matrix listing node values -->
             {#each nodeValues as node}
               <tr>
                 <td class="mono">{node.id}</td>
@@ -613,7 +679,7 @@ end`);
         {:else if opcUaTree}
           <!-- Displays root tree node which recursively calls children instances -->
           <div class="tree-display" style="padding: 10px; max-height: 70vh; overflow-y: auto;">
-            <OpcUaTreeNode node={opcUaTree} />
+            <OpcUaTreeNode node={opcUaTree} {isLoggedIn} />
           </div>
         {:else}
           <p style="text-align: center; padding: 20px; color: #ef4444;">
@@ -635,12 +701,12 @@ end`);
         <div class="glass-card">
           <div class="card-header">
             <h3>Script Editor</h3>
-            <button class="btn-run" onclick={runLuaScript} disabled={isRunningLua}>
+            <button class="btn-run" onclick={runLuaScript} disabled={isRunningLua || !isLoggedIn}>
               <PlayCircle size={16} />
               <span>{isRunningLua ? 'Running...' : 'Execute Script'}</span>
             </button>
           </div>
-          <textarea class="code-editor" bind:value={luaCode} rows="10"></textarea>
+          <textarea class="code-editor" bind:value={luaCode} rows="10" readonly={!isLoggedIn}></textarea>
         </div>
 
         <!-- Terminal log display simulating stdout/stderr buffers -->
@@ -1072,58 +1138,7 @@ end`);
     outline: none;
   }
 
-  /* 
-   * LEGACY TREE MOCKUP STYLING
-   * Retained for reference/regression fallback but commented out to clean compiler output.
-   *
-  .tree-mockup {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--text-h);
-    padding: 10px;
-  }
 
-  .tree-item {
-    margin: 6px 0;
-  }
-
-  .tree-children {
-    margin-left: 24px;
-    border-left: 1px dashed var(--border);
-    padding-left: 12px;
-  }
-
-  .tree-item .name {
-    font-weight: 500;
-  }
-
-  .tree-item .value {
-    color: var(--accent);
-    margin-left: 8px;
-  }
-
-  .tree-item .badge {
-    margin-left: 6px;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
-  .tree-item .badge.read {
-    background: rgba(49, 130, 206, 0.1);
-    color: #3182ce;
-  }
-
-  .tree-item .badge.write {
-    background: rgba(221, 107, 32, 0.1);
-    color: #dd6b20;
-  }
-
-  .tree-item .badge.subscribe {
-    background: rgba(128, 90, 213, 0.1);
-    color: #805ad5;
-  }
-  */
 
   /* Lua scripting styles */
   .btn-run {
