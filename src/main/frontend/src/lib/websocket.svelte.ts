@@ -80,7 +80,7 @@ export class WebSocketManager {
   }
   
   // ==========================================
-  // --- SVELTE 5 REACTIVE Runes STATES ---
+  // --- SVELTE 5 REACTIVE RUNES STATES ---
   // ==========================================
   
   /**
@@ -89,14 +89,36 @@ export class WebSocketManager {
    * - `false`: Disconnected, trying reconnection, or closed down.
    */
   connected = $state(false);
-  
+
+  /**
+   * Reconnection Activity Indicator.
+   * - `true`: Client is actively attempting to establish or re-establish a dropped WebSocket connection.
+   * - `false`: Stable connection active or client manually deactivated.
+   */
+  reconnecting = $state(false);
+
+  /**
+   * Current count of consecutive reconnection attempts.
+   */
+  reconnectAttempts = $state(0);
+
+  /**
+   * Maximum allowed consecutive auto-reconnect attempts before halting retries.
+   */
+  readonly maxReconnectAttempts = 10;
+
+  /**
+   * Descriptive connection error message, if an error frame or socket error occurred.
+   */
+  connectionError = $state<string | null>(null);
+
   /**
    * Historical buffer caching STOMP ping messages.
    * Stores records of type { id, message, timestamp }.
    * Limited to a maximum capacity of 50 items to prevent memory inflation.
    */
   pongs = $state<{ id: string; message: string; timestamp: number }[]>([]);
-  
+
   /**
    * Reactive OPC-UA tag telemetry dictionary.
    * Keys: OPC-UA NodeIDs (e.g., 'ns=1;s=Data/MySwitch').
@@ -106,20 +128,43 @@ export class WebSocketManager {
   opcUaUpdates = $state<Record<string, { value: string; timestamp: number }>>({});
 
   /**
+   * List of resynchronization listeners executed upon successful STOMP connection / reconnection.
+   */
+  private onReconnectCallbacks: Array<() => void> = [];
+
+  /**
+   * Registers a listener callback to execute whenever a connection or reconnection is successfully established.
+   * @param {() => void} callback - Handler function to execute.
+   * @returns {() => void} Unsubscribe function.
+   */
+  addOnReconnectListener(callback: () => void): () => void {
+    this.onReconnectCallbacks.push(callback);
+    return () => {
+      this.onReconnectCallbacks = this.onReconnectCallbacks.filter(cb => cb !== callback);
+    };
+  }
+
+  /**
    * Connection Lifecycle Controller.
    * Instantiates a new STOMP Client session. Registers event handlers for connect/disconnect
    * states, heartbeat ticks, error frames, and target channel subscriptions.
    */
   connect() {
     // Guards against spawning duplicate client instances if connection is active
-    if (this.client) return;
+    if (this.client && (this.client.active || this.connected)) return;
 
     const brokerURL = getWsUrl();
     console.log('[STOMP] Initializing connection to Broker at URL:', brokerURL);
+    this.connectionError = null;
 
     // Initialize STOMP options
     this.client = new Client({
       brokerURL,
+
+      /**
+       * Initial Connect Headers
+       */
+      connectHeaders: this.getHeaders(),
       
       // Auto-reconnect delay in milliseconds. The client waits 5 seconds if connection drops.
       reconnectDelay: 5000,
@@ -127,6 +172,31 @@ export class WebSocketManager {
       // Heartbeat configuration: sends packets every 4 seconds to verify link integrity.
       heartbeatIncoming: 4000,
       heartbeatOutgoing: 4000,
+
+      /**
+       * BeforeConnect Callback: Evaluated prior to initiating a connection handshake.
+       * Updates dynamic connect headers and enforces maximum retry cap (10 attempts).
+       */
+      beforeConnect: async () => {
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+          console.warn(`[STOMP] Reached maximum reconnection attempts (${this.maxReconnectAttempts}). Halting auto-reconnect.`);
+          this.connectionError = `Maximum reconnection attempts reached (${this.maxReconnectAttempts}/${this.maxReconnectAttempts}). Please check network/auth and reconnect manually.`;
+          this.reconnecting = false;
+          if (this.client) {
+            await this.client.deactivate();
+          }
+          return;
+        }
+
+        // Dynamically update authorization headers on every connection attempt
+        if (this.client) {
+          this.client.connectHeaders = this.getHeaders();
+        }
+
+        this.reconnectAttempts++;
+        this.reconnecting = true;
+        console.log(`[STOMP] Initiating connection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}...`);
+      },
       
       /**
        * Connect Callback: Triggered on successful STOMP connection handshake.
@@ -134,6 +204,9 @@ export class WebSocketManager {
        */
       onConnect: (frame) => {
         this.connected = true;
+        this.reconnecting = false;
+        this.reconnectAttempts = 0;
+        this.connectionError = null;
         console.log('[STOMP] Connection established successfully:', frame.headers);
 
         // 1. Subscribe to the public Ping Response Channel
@@ -171,6 +244,15 @@ export class WebSocketManager {
             console.error('[STOMP] Failed to parse OPC-UA update message body:', e);
           }
         });
+
+        // Execute resynchronization callbacks to refresh stale client states
+        this.onReconnectCallbacks.forEach(cb => {
+          try {
+            cb();
+          } catch (err) {
+            console.error('[STOMP] Error executing onReconnect listener:', err);
+          }
+        });
       },
       
       /**
@@ -178,19 +260,49 @@ export class WebSocketManager {
        */
       onDisconnect: () => {
         this.connected = false;
-        console.log('[STOMP] Connection closed down.');
+        console.log('[STOMP] STOMP session disconnected.');
       },
       
       /**
        * STOMP Protocol Error Callback: Handles frame level failures.
        */
       onStompError: (frame) => {
+        const errorMsg = frame.headers['message'] || frame.body || 'STOMP Protocol Error';
+        this.connectionError = `STOMP Error: ${errorMsg}`;
         console.error('[STOMP] Protocol error encountered:', frame.body);
+      },
+
+      /**
+       * Raw WebSocket Error Hook.
+       */
+      onWebSocketError: (event) => {
+        console.error('[STOMP] WebSocket transport error:', event);
+        this.connectionError = 'WebSocket network connection failed or was refused.';
+      },
+
+      /**
+       * Raw WebSocket Close Hook.
+       */
+      onWebSocketClose: (event) => {
+        this.connected = false;
+        console.warn(`[STOMP] WebSocket connection closed (Code: ${event.code}, Reason: ${event.reason || 'None'}).`);
       }
     });
 
     // Activate the STOMP connection client
     this.client.activate();
+  }
+
+  /**
+   * Manual Reconnection Controller.
+   * Resets retry counters, clears error messages, and triggers an immediate connection sequence.
+   */
+  reconnectNow() {
+    console.log('[STOMP] Manual reconnection requested by user.');
+    this.disconnect();
+    this.reconnectAttempts = 0;
+    this.connectionError = null;
+    this.connect();
   }
 
   /**
@@ -203,18 +315,22 @@ export class WebSocketManager {
       this.client.deactivate();
       this.client = null;
       this.connected = false;
+      this.reconnecting = false;
     }
   }
 
   /**
    * Sends a ping text frame payload to the Spring Boot message router.
+   * Rejects immediately with warning if offline.
    * 
    * @param {string} content - Message body string payload.
+   * @returns {boolean} True if published, false if rejected due to offline state.
    */
-  sendPing(content: string) {
+  sendPing(content: string): boolean {
     if (!this.client || !this.connected) {
-      console.warn('[STOMP] Cannot send ping: client is not currently connected to WebSocket.');
-      return;
+      console.warn('[STOMP] Action rejected: STOMP client is currently offline.');
+      this.connectionError = 'Cannot send message while offline. Please verify connection.';
+      return false;
     }
 
     const payload = {
@@ -229,6 +345,7 @@ export class WebSocketManager {
       body: JSON.stringify(payload)
     });
     console.log('[STOMP] Ping published to /app/ping:', payload);
+    return true;
   }
 
   /**

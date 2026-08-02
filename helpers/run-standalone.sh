@@ -27,9 +27,12 @@ Commands:
   clean        Remove all target files, compiled classes, and temporary build assets.
 
 Options:
-  -p, --port PORT    Override the Spring Boot web server listening port (default: 8080)
-  -b, --build        Force clean and compile before running the server (valid with 'run' and 'run-cli')
-  -h, --help         Show this help message with detailed explanations
+  -p, --port PORT               Override the Spring Boot web server listening port (default: 8080)
+  --with-embedded-opcua         Launch application with integrated OPC-UA stub server enabled
+  --opcua-port PORT             Override the embedded OPC-UA stub server port (default: 4840)
+  -b, --build                   Force clean and compile before running the server (valid with 'run' and 'run-cli')
+  -h, --help                    Show this help message with detailed explanations
+
 
 Detailed Commands Explanation:
   * run:
@@ -41,7 +44,7 @@ Detailed Commands Explanation:
     
   * run-cli:
     Similar to 'run', but boots the application in CLI headless mode. It passes 'cli' as the first application
-    argument, invoking the com.example.nunki.runner.CliRunner class to handle headless background processes.
+    argument, invoking the fr.cea.nunki.runner.CliRunner class to handle headless background processes.
     Equivalent to:
       1. java -Dserver.port=8080 -jar target/nunki-0.0.1-SNAPSHOT.jar cli
       
@@ -80,6 +83,14 @@ if [[ $# -eq 0 || "$1" = "-h" || "$1" = "--help" ]]; then
     exit 0
 fi
 
+# Default configuration
+PORT=8080
+EMBEDDED_OPCUA_ENABLED=false
+EMBEDDED_OPCUA_PORT=4840
+FORCE_BUILD=false
+
+# ... (show_help snippet omitted in comment)
+
 # Extract command
 COMMAND="$1"
 shift
@@ -96,6 +107,19 @@ while [[ $# -gt 0 ]]; do
             PORT="$2"
             shift 2
             ;;
+        --with-embedded-opcua)
+            EMBEDDED_OPCUA_ENABLED=true
+            shift
+            ;;
+        --opcua-port)
+            if [[ -z "${2:-}" || "${2:-}" =~ ^- ]]; then
+                echo "Error: --opcua-port requires a non-empty port number value." >&2
+                exit 1
+            fi
+            EMBEDDED_OPCUA_PORT="$2"
+            EMBEDDED_OPCUA_ENABLED=true
+            shift 2
+            ;;
         -b|--build)
             FORCE_BUILD=true
             shift
@@ -106,6 +130,7 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
 
 # Helper function to check java
 check_java() {
@@ -183,16 +208,21 @@ case "$COMMAND" in
         
         echo "========================================================================"
         echo "Starting Nunki Standalone Server"
-        echo "  - Command:       $COMMAND"
-        echo "  - Web Port:      $PORT"
+        echo "  - Command:               $COMMAND"
+        echo "  - Web Port:              $PORT"
+        echo "  - Embedded OPC-UA Server: $EMBEDDED_OPCUA_ENABLED (port $EMBEDDED_OPCUA_PORT)"
         if [ ${#APP_ARGS[@]} -gt 0 ]; then
-            echo "  - App Arguments: ${APP_ARGS[*]}"
+            echo "  - App Arguments:         ${APP_ARGS[*]}"
         fi
         echo "========================================================================"
         
         # Execute the Spring Boot standalone application
-        exec java -Dserver.port="$PORT" -jar "$JAR_PATH" "${APP_ARGS[@]:+${APP_ARGS[@]}}"
+        exec java -Dserver.port="$PORT" \
+             -Dopcua.embedded-server.enabled="$EMBEDDED_OPCUA_ENABLED" \
+             -Dopcua.embedded-server.port="$EMBEDDED_OPCUA_PORT" \
+             -jar "$JAR_PATH" "${APP_ARGS[@]:+${APP_ARGS[@]}}"
         ;;
+
         
     *)
         echo "Error: Unknown command '$COMMAND'" >&2

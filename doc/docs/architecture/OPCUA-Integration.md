@@ -81,24 +81,55 @@ graph TD
 
 ---
 
-## 4. Verification & Testing
+## 6. Integrated Java OPC-UA Stub Server (`QuasarOpcUaServer`)
 
-### Unit Tests
-* **`OpcUaControllerTest.java`**: Uses Spring MockMvc and `@MockBean` to stub `OpcUaClientApi` behavior.
-  * Asserts GET `/api/opcua/tree` returns valid JSON tree mappings.
-  * Asserts POST `/api/opcua/write` converts types and returns status code.
-  * Asserts POST `/api/opcua/invoke` triggers method calls and parses output arguments.
+To support functional requirements and automated continuous integration testing without requiring external C++ binaries, Nunki embeds a full Java-based OPC-UA Stub Server built on **Eclipse Milo (`sdk-server`)**.
 
-### E2E Integration Tests
-* **`NavbarPlaywrightTest.java`**: Integrates Playwright E2E automation.
-  * Asserts navigating to the "Values -> Tree view" dashboard.
-  * Asserts recursive rendering of mocked folders (`Data`) and variables (`MySwitch`).
+### Configuration & Launch Options
+The embedded server can be toggled and configured via `application.yml` or Spring Boot command-line options:
+
+```yaml
+opcua:
+  embedded-server:
+    enabled: true                  # Launches the integrated server on application startup
+    port: 4840                     # Target TCP port (default: 4840)
+    warmup-delay-seconds: 15       # Warmup delay before fast counters begin ticking
+    enable-process-simulation: true # Enables the 100 ms tank level / pump mimic simulation
+```
+
+Command-line launch option:
+```bash
+java -jar target/nunki-0.0.1-SNAPSHOT.jar --opcua.embedded-server.enabled=true
+```
+
+### Address Space Mirroring
+The Java stub server mirrors the exact 4-branch address space of the C++ Quasar server:
+1. **`LargeTree` Branch**: 1,000 synthetic nodes (5 levels, 539 L5 leaves with round-robin types `Int32`, `Boolean`, `Double`, `String`, `Method`).
+2. **`CounterControl` Branch**: `CounterValue` (`Int32`), `Increment()` (+1), and `Decrement()` (-1) RPC methods.
+3. **`FastCounters` Branch**: `Counter_1Hz` to `Counter_100Hz` with tick rate scaling and 15s warmup delay.
+4. **`Data` Branch & Mimic Simulation**: `MyInt`, `MySwitch`, `PumpRunning`, `TankLevel`, `ToggleSwitch()` method, `ExecuteScript()` method with LuaJ engine execution, and a 100 ms process mimic simulation loop.
 
 ---
 
-## 5. Architectural Quality Standards Compliance (CS-0020 / CS-0030)
+## 7. Verification & Testing Matrix
 
-1. **Precondition Rejections [CS-0030.1]**: Every DTO constructor and REST endpoint explicitly enforces null checks (`Objects.requireNonNull`) and parameter bounds.
+### Embedded Server & E2E Integration Test Suites
+* **`QuasarOpcUaServerTest.java`**: Direct unit and integration tests for `QuasarOpcUaServer` and `QuasarNamespace`.
+  * Verifies 1,000-node `LargeTree` browsing.
+  * Verifies read/write operations on variables (`MyInt`, `MySwitch`).
+  * Verifies RPC method calls (`Increment`, `Decrement`, `ToggleSwitch`).
+  * Verifies `ExecuteScript` Lua script execution returning JSON logs and status envelopes.
+  * Verifies 100 ms process mimic simulation tank level dynamics.
+* **`OpcUaEmbeddedServerIntegrationTest.java`**: Tests Spring Boot startup when `opcua.embedded-server.enabled=true`.
+* **`OpcUaDisabledServerIntegrationTest.java`**: Tests Spring Boot startup when `opcua.embedded-server.enabled=false`.
+* **`OpcUaEndToEndRestStompTest.java`**: Full-chain integration test validating REST tree browsing, writes, method calls, and STOMP `/topic/opcua-tree` telemetry broadcasts against the live embedded server.
+* **`EmbeddedOpcUaPlaywrightTest.java`**: Playwright browser emulation tests executing UI interactions against the live Spring app and integrated OPC-UA server.
+
+---
+
+## 8. Architectural Quality Standards Compliance (CS-0020 / CS-0030)
+
+1. **Precondition Rejections [CS-0030.1]**: Every DTO constructor, server method, and REST endpoint explicitly enforces null checks (`Objects.requireNonNull`) and parameter bounds.
 2. **Null Safety [CS-0030.2]**: No endpoint or DTO method allows or propagates `null` values. Fallbacks return empty lists or empty strings.
 3. **Explicit Typing [CS-0030.10]**: No usage of `var` type inference in Java backend code. Every type is statically and explicitly declared.
 4. **Constructor Injection [CS-0030.13]**: Components use constructor-based dependency injection with immutable final fields.

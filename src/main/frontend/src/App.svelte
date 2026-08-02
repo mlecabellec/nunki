@@ -30,7 +30,9 @@
     Search,
     PlayCircle,
     UserCheck,
-    Cpu
+    Cpu,
+    RefreshCw,
+    AlertCircle
   } from '@lucide/svelte';
 
   // --- Reactive States (Runes) ---
@@ -257,6 +259,8 @@ end`);
     }
   ]);
 
+  let unsubscribeReconnect: (() => void) | null = null;
+
   // Connect STOMP websockets on layout mount
   onMount(() => {
     const savedAuth = localStorage.getItem('nunki_auth');
@@ -266,12 +270,22 @@ end`);
     } else {
       isLoggedIn = false;
     }
+
+    // Register resynchronization hook on connection recovery
+    unsubscribeReconnect = wsManager.addOnReconnectListener(() => {
+      console.log('[App] Reconnection detected - automatically resynchronizing OPC-UA tree...');
+      fetchOpcUaTree();
+    });
+
     wsManager.connect();
     fetchOpcUaTree();
   });
 
   // Stop background intervals and disconnect sockets on layout destroy
   onDestroy(() => {
+    if (unsubscribeReconnect) {
+      unsubscribeReconnect();
+    }
     stopAutoPing();
     wsManager.disconnect();
   });
@@ -513,11 +527,34 @@ end`);
         <!-- WebSocket Response Logger Console Card -->
         <div class="glass-card logs-card">
           <div class="card-header">
-            <h3>Response Logs</h3>
-            <span class="badge" class:live={wsManager.connected}>
-              {wsManager.connected ? 'LIVE' : 'OFFLINE'}
-            </span>
+            <div class="header-title-group">
+              <h3>Response Logs</h3>
+              {#if wsManager.connected}
+                <span class="badge live">LIVE</span>
+              {:else if wsManager.reconnecting}
+                <span class="badge reconnecting">
+                  <RefreshCw size={10} class="spin-icon" />
+                  RECONNECTING ({wsManager.reconnectAttempts}/{wsManager.maxReconnectAttempts})
+                </span>
+              {:else}
+                <span class="badge offline">OFFLINE</span>
+              {/if}
+            </div>
+
+            {#if !wsManager.connected}
+              <button onclick={() => wsManager.reconnectNow()} class="btn-reconnect" title="Manual Reconnect Trigger">
+                <RefreshCw size={14} />
+                <span>Reconnect Now</span>
+              </button>
+            {/if}
           </div>
+
+          {#if wsManager.connectionError}
+            <div class="connection-alert">
+              <AlertCircle size={14} />
+              <span>{wsManager.connectionError}</span>
+            </div>
+          {/if}
           
           <div class="logs-container">
             {#if wsManager.pongs.length === 0}
@@ -973,6 +1010,14 @@ end`);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .header-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   .badge {
@@ -980,6 +1025,9 @@ end`);
     border-radius: 20px;
     font-size: 10px;
     font-weight: bold;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     background: rgba(229, 62, 62, 0.1);
     color: #e53e3e;
   }
@@ -988,6 +1036,59 @@ end`);
     background: rgba(72, 187, 120, 0.1);
     color: #48bb78;
     box-shadow: 0 0 10px rgba(72, 187, 120, 0.2);
+  }
+
+  .badge.reconnecting {
+    background: rgba(236, 201, 75, 0.15);
+    color: #d69e2e;
+    box-shadow: 0 0 10px rgba(236, 201, 75, 0.2);
+  }
+
+  .badge.offline {
+    background: rgba(229, 62, 62, 0.15);
+    color: #e53e3e;
+  }
+
+  .btn-reconnect {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(66, 153, 225, 0.15);
+    color: #3182ce;
+    border: 1px solid rgba(66, 153, 225, 0.3);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .btn-reconnect:hover {
+    background: #3182ce;
+    color: #ffffff;
+  }
+
+  .connection-alert {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    background: rgba(229, 62, 62, 0.12);
+    border: 1px solid rgba(229, 62, 62, 0.3);
+    color: #fc8181;
+  }
+
+  :global(.spin-icon) {
+    animation: spin-rotate 1.2s linear infinite;
+  }
+
+  @keyframes spin-rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .logs-container {
