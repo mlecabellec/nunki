@@ -8,7 +8,7 @@
         <version>3.2.5</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
-    <groupId>fr.cea</groupId>
+    <groupId>fr.lecabellec</groupId>
     <artifactId>nunki</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>nunki</name>
@@ -188,7 +188,7 @@
                             <configuration>
                                 <createDependencyReducedPom>false</createDependencyReducedPom>
                                 <manifestEntries>
-                                    <Main-Class>fr.cea.nunki.NunkiApplication</Main-Class>
+                                    <Main-Class>fr.lecabellec.nunki.NunkiApplication</Main-Class>
                                 </manifestEntries>
                             </configuration>
                         </execution>

@@ -44,7 +44,7 @@ Detailed Commands Explanation:
     
   * run-cli:
     Similar to 'run', but boots the application in CLI headless mode. It passes 'cli' as the first application
-    argument, invoking the fr.cea.nunki.runner.CliRunner class to handle headless background processes.
+    argument, invoking the fr.lecabellec.nunki.runner.CliRunner class to handle headless background processes.
     Equivalent to:
       1. java -Dserver.port=8080 -jar target/nunki-0.0.1-SNAPSHOT.jar cli
       
