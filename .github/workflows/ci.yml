@@ -75,6 +75,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
+      - name: Prepare Quasar Build Context
+        run: |
+          mkdir -p quasar/quasar_server
+          cp -r nunki/quasar_server/* quasar/quasar_server/
+
       - name: Build Docker Stack
         run: |
           docker compose -f nunki/helpers/docker-compose.yml build
