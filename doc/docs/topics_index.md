@@ -34,3 +34,4 @@ Focuses on repository build commands, Docker compilation, and execution helper s
 - [Developer Helpers Reference](helpers/HELPERS.md): CLI runners, docker-compose files, standalone executions, and packaging scripts.
 - [Preliminary Project Requirements](misc/requirements.md): Scope matrix outlining backend Kafka/Mongo, frontend SVG mimics, and authentication LDAPs.
 - [build-docs.sh Documentation Builder](file:///home/vortigern/git/nunki/helpers/build-docs.sh): Helper automation tool for compiling diagrams and MkDocs manuals.
+- [Project TODOs](TODO.md): Task tracking and status backlog.

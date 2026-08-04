@@ -43,6 +43,7 @@ nav:
       - Requirements: misc/requirements.md
       - Frontend README: src/main/frontend/README.md
       - Developer Helpers: helpers/HELPERS.md
+      - Project TODOs: TODO.md
   - Architecture Decision Records (ADRs):
       - Mockito Design: docs/DESIGN.md
       - "ADR-0010: Introduce Mockito": docs/adr/ADR-0010.md

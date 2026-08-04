@@ -8,3 +8,4 @@ Use the top tabs and left sidebar to navigate the following sections:
 *   [Architecture](architecture/CS-0010.md): Architectural decisions and integrations.
 *   [Miscellaneous](misc/requirements.md): General requirements.
 *   [Reports](reports/INITIALIZATION_REPORT.md): Project initialization and status reports.
+*   [Project TODOs](TODO.md): Task tracking and status backlog.
