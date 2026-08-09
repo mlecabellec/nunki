@@ -58,6 +58,7 @@ graph TD
 3. **⚡ STOMP WebSocket Broadcasting**: Utilizes a broker-backed WebSocket channel to stream live tag updates to subscribed client dashboards.
 4. **🔄 Multi-Broker Event Bus**: Bridges telemetry updates to Apache Kafka topics and ZeroMQ sockets to satisfy both store-and-forward and low-overhead pub/sub distribution patterns.
 5. **🎨 Embedded Svelte Dashboard**: Features an integrated Svelte-based monitoring console built and bundled inside the Spring Boot jar at package time.
+6. **🤖 Cyberpunk TUI & Turnkey Setup**: Provides a futuristic terminal interface (`./nunki-helper.sh`) with automated system diagnostics, automatic portable tool downloading (OpenJDK 17 + Maven), and launch management across all configurations.
 
 ---
 

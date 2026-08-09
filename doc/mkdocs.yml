@@ -43,6 +43,7 @@ nav:
       - Requirements: misc/requirements.md
       - Frontend README: src/main/frontend/README.md
       - Developer Helpers: helpers/HELPERS.md
+      - Cyberpunk TUI & Turnkey Helper: helpers/tui_guide.md
       - Project TODOs: TODO.md
   - Architecture Decision Records (ADRs):
       - Mockito Design: docs/DESIGN.md

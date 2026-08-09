@@ -29,7 +29,8 @@ doc/site/
 doc/man/
 doc/documentation.pdf
 
-# Cache directory
+# Cache and local tool directories
 .cache/
+.tools/
 
 

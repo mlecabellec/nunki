@@ -216,8 +216,9 @@ case "$COMMAND" in
         fi
         echo "========================================================================"
         
-        # Execute the Spring Boot standalone application
+        DEFAULT_OPCUA_URL="${QUASAR_OPCUA_URL:-opc.tcp://localhost:${EMBEDDED_OPCUA_PORT}/opcua}"
         exec java -Dserver.port="$PORT" \
+             -Dquasar.opcua.url="$DEFAULT_OPCUA_URL" \
              -Dopcua.embedded-server.enabled="$EMBEDDED_OPCUA_ENABLED" \
              -Dopcua.embedded-server.port="$EMBEDDED_OPCUA_PORT" \
              -jar "$JAR_PATH" "${APP_ARGS[@]:+${APP_ARGS[@]}}"

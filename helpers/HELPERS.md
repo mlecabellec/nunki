@@ -5,16 +5,62 @@ This directory contains a suite of utility and orchestrator scripts to build, te
 ---
 
 ## Table of Contents
-1. [Prerequisites & System Setup](#prerequisites--system-setup)
-2. [Standalone Execution (`run-standalone.sh`)](#1-standalone-execution-run-standalonesh)
-3. [Embedded OPC-UA Shortcuts](#2-embedded-opc-ua-shortcuts)
-4. [Multi-Container Orchestration (`run-integrated.sh`)](#3-multi-container-orchestration-run-integratedsh)
-5. [Documentation Builder & Link Checker](#4-documentation-builder--link-checker)
-6. [Packaging Scripts (`package.sh` & `package-quasar.sh`)](#5-packaging-scripts-packagesh--package-quasarsh)
-7. [GitHub Actions Workflow Watchers](#6-github-actions-workflow-watchers)
-8. [Step-by-Step Guides](#7-step-by-step-guides)
+1. [Cyberpunk TUI & Turnkey Setup (`nunki-helper.sh`)](#1-cyberpunk-tui--turnkey-setup-nunki-helpersh)
+2. [Environment Activation (`activate-env.sh`)](#2-environment-activation-activate-envsh)
+3. [Standalone Execution (`run-standalone.sh`)](#3-standalone-execution-run-standalonesh)
+4. [Embedded OPC-UA Shortcuts](#4-embedded-opc-ua-shortcuts)
+5. [Multi-Container Orchestration (`run-integrated.sh`)](#5-multi-container-orchestration-run-integratedsh)
+6. [Documentation Builder & Link Checker](#6-documentation-builder--link-checker)
+7. [Packaging Scripts (`package.sh` & `package-quasar.sh`)](#7-packaging-scripts-packagesh--package-quasarsh)
+8. [GitHub Actions Workflow Watchers](#8-github-actions-workflow-watchers)
+9. [Step-by-Step Guides](#9-step-by-step-guides)
     - [Running Nunki Standalone with the Embedded OPC-UA Server](#running-nunki-standalone-with-the-embedded-opc-ua-server)
     - [Running Nunki in Containers (Build & Run)](#running-nunki-in-containers-build--run)
+
+---
+
+## 1. Cyberpunk TUI & Turnkey Setup (`nunki-helper.sh`)
+
+Nunki includes a futuristic **Cyberpunk Terminal UI (TUI)** and turnkey environment orchestrator (`helpers/nunki-tui.py` & `helpers/nunki-tui.sh`), launched seamlessly via `./nunki-helper.sh`.
+
+### Key Capabilities
+* **Interactive Cyberpunk TUI**: Neon cyan/magenta interface built with standard Python `curses` and ANSI box drawing.
+* **Automated System Diagnostics**: Analyzes Linux distribution, JDK version, Maven installation, Docker/Podman container runtimes, and checks availability of TCP ports `8080` (HTTP) and `4840` (OPC-UA).
+* **Turnkey Portable Tool Downloader**: Downloads and extracts portable OpenJDK 17 (Adoptium Eclipse Temurin) and Apache Maven 3.9+ directly into `.tools/` without requiring root/sudo permissions.
+* **Environment Configuration**: Interactively builds runtime environment variables (`QUASAR_OPCUA_URL`, `OPCUA_EMBEDDED_SERVER_ENABLED`, `OPCUA_EMBEDDED_SERVER_PORT`, `PORT`).
+
+### Usage
+```bash
+# Launch interactive TUI Interface
+./nunki-helper.sh
+
+# Run non-interactive system diagnostics check
+./nunki-helper.sh check
+
+# Download missing portable JDK 17 & Maven binaries to .tools/
+./nunki-helper.sh prep
+
+# Launch standalone with embedded test OPC-UA server
+./nunki-helper.sh embedded
+
+# Launch multi-container Docker stack (Nunki + Quasar C++ server)
+./nunki-helper.sh docker
+```
+
+---
+
+## 2. Environment Activation (`activate-env.sh`)
+
+The `activate-env.sh` script automatically detects portable tools located in `.tools/jdk` and `.tools/maven`, updates `PATH` and `JAVA_HOME`/`MAVEN_HOME`, and exports default Nunki configuration variables.
+
+### Usage
+```bash
+# Source environment variables in current shell session
+source activate-env.sh
+
+# View active environment summary
+./activate-env.sh check
+```
 
 ---
 
