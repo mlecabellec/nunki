@@ -447,8 +447,7 @@ rectangle "App.svelte Layout" {
     }
     
     rectangle "main.main-content (Active tab container)" as Content {
-        
-        alt activeTab === 'home'
+        card "activeTab === 'home'" {
             rectangle "Dashboard Header (Title & Subtitle)"
             rectangle "Grid Layout (2 Columns)" {
                 rectangle "Ping Card (glass-card)" {
@@ -461,23 +460,23 @@ rectangle "App.svelte Layout" {
                     rectangle "Scrollable list of Pong items (Time - Message)"
                 }
             }
-            
-        else activeTab === 'diagrams'
-            rectangle "Dashboard Header"
+        }
+        card "activeTab === 'diagrams'" {
+            rectangle "Dashboard Header (Diagrams)"
             rectangle "SynopticView.svelte (Interactive Process Mimic)" as SynopticComp {
                 rectangle "Controls Area: [Start/Stop Pump] | [Open/Close Valve] | Tank Level: X% [Slider]"
                 rectangle "SVG Canvas: Storage Tank T-101 | Pipes | Pump Impeller | Drain Valve Icon"
             }
-            
-        else activeTab === 'timeseries'
-            rectangle "Dashboard Header"
+        }
+        card "activeTab === 'timeseries'" {
+            rectangle "Dashboard Header (TimeSeries)"
             rectangle "TimeSeriesChart.svelte (Live Charting)" as ChartComp {
                 rectangle "Chart Header: Point count indicator"
                 rectangle "SVG Area: Dynamic grid lines | Area gradient | Plotted sensor line | Highlight dots"
             }
-            
-        else activeTab === 'tree'
-            rectangle "Dashboard Header"
+        }
+        card "activeTab === 'tree'" {
+            rectangle "Dashboard Header (Tree)"
             rectangle "OPC-UA Address Space Container" {
                 rectangle "Controls: [Refresh Address Space] | Error Message banner"
                 rectangle "OpcUaTreeNode.svelte (Root Node - Recursive)" as TreeComp {
@@ -488,9 +487,9 @@ rectangle "App.svelte Layout" {
                     }
                 }
             }
-            
-        else activeTab === 'automation-lua'
-            rectangle "Dashboard Header"
+        }
+        card "activeTab === 'automation-lua'" {
+            rectangle "Dashboard Header (Lua)"
             rectangle "Grid Layout (2 Columns)" {
                 rectangle "Script Editor Card" {
                     rectangle "Lua code input (textarea)"
@@ -500,7 +499,7 @@ rectangle "App.svelte Layout" {
                     rectangle "Console log history list (stdout)"
                 }
             }
-        end
+        }
     }
 }
 @enduml
