@@ -23,13 +23,27 @@ RUN --mount=type=cache,target=/root/.cache/ccache \
               -DCMAKE_VERBOSE_MAKEFILE=ON \
               -DCMAKE_C_COMPILER_LAUNCHER=ccache \
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache && \
-    make -j$(nproc) quasar_opcua quasar_named quasar_coretypes quasar_scripting open62541
+    CPUS=$(nproc 2>/dev/null || echo 2) && \
+    MEM_AVAIL_KB=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0) && \
+    MEM_JOBS=$(( MEM_AVAIL_KB / 4194304 )) && \
+    if [ "$MEM_JOBS" -lt 1 ]; then MEM_JOBS=1; fi && \
+    BUILD_JOBS=$(( CPUS < MEM_JOBS ? CPUS : MEM_JOBS )) && \
+    if [ "$BUILD_JOBS" -gt 2 ]; then BUILD_JOBS=2; fi && \
+    make -j"$BUILD_JOBS" liblua quasar_coretypes quasar_named utils && \
+    make -j1 quasar_scripting && \
+    make -j"$BUILD_JOBS" quasar_opcua open62541
 
 # Compile the standalone server (from nunki/quasar_server)
 COPY quasar_server /quasar/quasar_server
 RUN mkdir -p /quasar/quasar_server/build && cd /quasar/quasar_server/build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release -DQUASAR_ROOT=/quasar && \
-    make -j$(nproc) && \
+    CPUS=$(nproc 2>/dev/null || echo 2) && \
+    MEM_AVAIL_KB=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0) && \
+    MEM_JOBS=$(( MEM_AVAIL_KB / 4194304 )) && \
+    if [ "$MEM_JOBS" -lt 1 ]; then MEM_JOBS=1; fi && \
+    BUILD_JOBS=$(( CPUS < MEM_JOBS ? CPUS : MEM_JOBS )) && \
+    if [ "$BUILD_JOBS" -gt 2 ]; then BUILD_JOBS=2; fi && \
+    make -j"$BUILD_JOBS" && \
     cp quasar_server /quasar/build/quasar_server
 
 # Run stage

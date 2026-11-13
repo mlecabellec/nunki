@@ -41,6 +41,8 @@ jobs:
           uname -a
           id
           pwd
+          nproc || true
+          free -h || true
           df -h . || true
           echo "=== Runner Context ==="
           printf '%s\n' "$CTX_RUNNER"
@@ -80,7 +82,7 @@ jobs:
       - name: Install Build Dependencies (Fedora)
         if: matrix.os == 'fedora'
         run: |
-          dnf install -y curl sudo gcc-c++ make cmake pkgconf-pkg-config python3 file \
+          dnf install -y curl sudo ccache gcc-c++ make cmake pkgconf-pkg-config python3 file \
                          alsa-lib-devel libX11-devel libXrandr-devel libXi-devel \
                          mesa-libGL-devel mesa-libGLU-devel libXcursor-devel libXinerama-devel \
                          gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel libzstd-devel \
@@ -90,7 +92,7 @@ jobs:
         if: matrix.os == 'archlinux'
         run: |
           pacman -S --needed --noconfirm \
-                         curl sudo base-devel cmake python file \
+                         curl sudo base-devel ccache cmake python file \
                          alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
                          gmp openssl util-linux-libs zlib binutils jdk21-openjdk maven npm python-pip plantuml pango cairo \
                          cantarell-fonts gnu-free-fonts zstd
@@ -133,17 +135,47 @@ jobs:
           mvn clean package -DskipTests
           ./helpers/package.sh ${{ matrix.pkg_type }} ../dist-packages
 
+      - name: Restore Quasar ccache
+        id: quasar-ccache-restore
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: quasar/.ccache
+          key: ${{ matrix.os }}-quasar-ccache-${{ gitea.sha }}-${{ gitea.run_id }}-${{ gitea.run_attempt }}
+          restore-keys: |
+            ${{ matrix.os }}-quasar-ccache-${{ gitea.sha }}-
+            ${{ matrix.os }}-quasar-ccache-
+
       - name: Build and Package Quasar
+        env:
+          CCACHE_DIR: ${{ gitea.workspace }}/quasar/.ccache
         run: |
           cd quasar
-          mkdir -p build-projects
+          mkdir -p .ccache build-projects
+          ccache -z || true
           cmake -S cmake-projects -B build-projects \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_POLICY_DEFAULT_CMP0000=NEW \
             -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
             -DCMAKE_SHARED_LINKER_FLAGS="-lzstd" \
             -DCMAKE_EXE_LINKER_FLAGS="-lzstd"
-          cmake --build build-projects --parallel $(nproc)
+          CPUS=$(nproc 2>/dev/null || echo 2)
+          MEM_AVAIL_KB=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+          # Reserve ~4 GiB per concurrent C++23 -O3 compilation slot (0B swap on runner), capped at 2
+          MEM_JOBS=$(( MEM_AVAIL_KB / 4194304 ))
+          if [ "$MEM_JOBS" -lt 1 ]; then MEM_JOBS=1; fi
+          BUILD_JOBS=$(( CPUS < MEM_JOBS ? CPUS : MEM_JOBS ))
+          if [ "$BUILD_JOBS" -gt 2 ]; then BUILD_JOBS=2; fi
+          echo "Quasar build parallelism: BUILD_JOBS=$BUILD_JOBS (nproc=$CPUS, MemAvailable=${MEM_AVAIL_KB}kB)"
+          free -h || true
+          cmake --build build-projects --target liblua quasar_coretypes quasar_named utils --parallel "$BUILD_JOBS" --verbose
+          # Build sol2-heavy quasar_scripting sequentially so RegistryBindings.cpp has full RAM headroom
+          cmake --build build-projects --target quasar_scripting --parallel 1 --verbose
+          cmake --build build-projects --parallel "$BUILD_JOBS" --verbose
+          free -h || true
+          ccache -s || true
           ../nunki/helpers/package-quasar.sh ${{ matrix.pkg_type }} ../dist-packages
 
       - name: Generate Distro Containerfiles
@@ -198,9 +230,19 @@ jobs:
           name: release-${{ matrix.os }}
           path: dist-packages/*
 
+      - name: Save Quasar ccache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: quasar/.ccache
+          key: ${{ matrix.os }}-quasar-ccache-${{ gitea.sha }}-${{ gitea.run_id }}-${{ gitea.run_attempt }}
+
       - name: "Diagnostic: Post-Run Summary"
         if: always()
         run: |
           echo "Job Status: ${{ job.status }}"
+          free -h || true
           df -h . || true
+          du -sh quasar/.ccache quasar/build-projects dist-packages 2>/dev/null || true
           ls -la
