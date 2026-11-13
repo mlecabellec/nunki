@@ -1,0 +1,157 @@
+name: Multi-OS Packaging and Release (Gitea)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  package:
+    name: Package on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: debian-12
+            pkg_type: deb
+            base_image: docker.io/library/debian:bookworm
+          - os: debian-13
+            pkg_type: deb
+            base_image: docker.io/library/debian:trixie
+          - os: fedora
+            pkg_type: rpm
+            base_image: docker.io/library/fedora:latest
+          - os: archlinux
+            pkg_type: arch
+            base_image: docker.io/library/archlinux:latest
+
+    steps:
+      - name: Install Node.js and Git Prerequisites (Debian)
+        if: matrix.os == 'debian-12' || matrix.os == 'debian-13'
+        run: apt-get update && apt-get install -y --no-install-recommends nodejs git ca-certificates
+
+      - name: Install Node.js and Git Prerequisites (Arch Linux)
+        if: matrix.os == 'archlinux'
+        run: pacman -Sy --noconfirm nodejs git ca-certificates
+
+      - name: Install Node.js and Git Prerequisites (Fedora)
+        if: matrix.os == 'fedora'
+        run: dnf install -y nodejs git ca-certificates
+
+      - name: Install Build Dependencies (Debian)
+        if: matrix.os == 'debian-12' || matrix.os == 'debian-13'
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends curl wget gnupg sudo \
+                             ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
+                             libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
+                             libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev libzstd-dev \
+                             maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
+          . /etc/os-release
+          mkdir -p /etc/apt/keyrings
+          wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc >/dev/null
+          echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb ${VERSION_CODENAME:-bookworm} main" | tee /etc/apt/sources.list.d/adoptium.list
+          apt-get update && apt-get install -y --no-install-recommends temurin-21-jdk || apt-get install -y --no-install-recommends openjdk-21-jdk
+
+      - name: Install Build Dependencies (Fedora)
+        if: matrix.os == 'fedora'
+        run: |
+          dnf install -y curl sudo gcc-c++ make cmake pkgconf-pkg-config python3 file \
+                         alsa-lib-devel libX11-devel libXrandr-devel libXi-devel \
+                         mesa-libGL-devel mesa-libGLU-devel libXcursor-devel libXinerama-devel \
+                         gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel libzstd-devel \
+                         java-21-openjdk-devel maven rpm-build python3-pip plantuml pango cairo
+
+      - name: Install Build Dependencies (Arch Linux)
+        if: matrix.os == 'archlinux'
+        run: |
+          pacman -S --needed --noconfirm \
+                         curl sudo base-devel cmake python file \
+                         alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
+                         gmp openssl util-linux-libs zlib binutils jdk21-openjdk maven npm python-pip plantuml pango cairo \
+                         cantarell-fonts gnu-free-fonts zstd
+          archlinux-java set java-21-openjdk || true
+
+      - name: Checkout Nunki
+        uses: actions/checkout@v4
+        with:
+          path: nunki
+
+      - name: Checkout Quasar
+        uses: actions/checkout@v4
+        with:
+          repository: m/quasar
+          github-server-url: ${{ gitea.server_url }}
+          path: quasar
+          token: ${{ gitea.token }}
+
+      - name: Build Nunki
+        run: |
+          cd nunki
+          mvn clean package -DskipTests
+          ./helpers/package.sh ${{ matrix.pkg_type }} ../dist-packages
+
+      - name: Build and Package Quasar
+        run: |
+          cd quasar
+          mkdir -p build-projects
+          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_SHARED_LINKER_FLAGS="-lzstd" -DCMAKE_EXE_LINKER_FLAGS="-lzstd"
+          cmake --build build-projects
+          ../nunki/helpers/package-quasar.sh ${{ matrix.pkg_type }} ../dist-packages
+
+      - name: Generate Distro Containerfiles
+        run: |
+          mkdir -p distro-dockerfiles
+          if [ "${{ matrix.pkg_type }}" = "deb" ]; then
+            printf 'FROM %s\nRUN apt-get update && apt-get install -y openjdk-21-jre-headless && rm -rf /var/lib/apt/lists/*\nCOPY nunki_*.deb /tmp/\nRUN dpkg -i /tmp/nunki_*.deb || apt-get install -f -y\nEXPOSE 8080\nENTRYPOINT ["/usr/bin/nunki"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.nunki
+            printf 'FROM %s\nRUN apt-get update && apt-get install -y libssl3 libuuid1 zlib1g && rm -rf /var/lib/apt/lists/*\nCOPY quasar_*.deb /tmp/\nRUN dpkg -i /tmp/quasar_*.deb || apt-get install -f -y\nEXPOSE 4840\nENTRYPOINT ["/usr/bin/quasar_server"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.quasar
+          elif [ "${{ matrix.pkg_type }}" = "rpm" ]; then
+            printf 'FROM %s\nRUN dnf install -y java-21-openjdk-headless && dnf clean all\nCOPY nunki-*.rpm /tmp/\nRUN dnf localinstall -y /tmp/nunki-*.rpm\nEXPOSE 8080\nENTRYPOINT ["/usr/bin/nunki"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.nunki
+            printf 'FROM %s\nRUN dnf install -y openssl zlib libuuid && dnf clean all\nCOPY quasar-*.rpm /tmp/\nRUN dnf localinstall -y /tmp/quasar-*.rpm\nEXPOSE 4840\nENTRYPOINT ["/usr/bin/quasar_server"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.quasar
+          elif [ "${{ matrix.pkg_type }}" = "arch" ]; then
+            printf 'FROM %s\nCOPY nunki-*.pkg.tar.zst /tmp/\nRUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/nunki-*.pkg.tar.zst && pacman -Scc --noconfirm\nEXPOSE 8080\nENTRYPOINT ["/usr/bin/nunki"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.nunki
+            printf 'FROM %s\nCOPY quasar-*.pkg.tar.zst /tmp/\nRUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/quasar-*.pkg.tar.zst && pacman -Scc --noconfirm\nEXPOSE 4840\nENTRYPOINT ["/usr/bin/quasar_server"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.quasar
+          fi
+          cp distro-dockerfiles/Dockerfile.nunki dist-packages/
+          cp distro-dockerfiles/Dockerfile.quasar dist-packages/
+
+      - name: Checkout MkDocs Kit
+        uses: actions/checkout@v4
+        with:
+          repository: m/mkdocs-kit
+          github-server-url: ${{ gitea.server_url }}
+          path: mkdocs-kit
+          token: ${{ gitea.token }}
+
+      - name: Install Python dependencies for documentation
+        run: |
+          python3 -m venv .venv-docs
+          .venv-docs/bin/pip install --upgrade pip
+          .venv-docs/bin/pip install "setuptools<82.0.0"
+          .venv-docs/bin/pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
+
+      - name: Build Nunki Documentation
+        continue-on-error: true
+        run: PYTHONPATH=${{ gitea.workspace }}/mkdocs-kit/src ${{ gitea.workspace }}/.venv-docs/bin/python3 ${{ gitea.workspace }}/mkdocs-kit/src/mkdocs_kit/cli.py build
+        working-directory: nunki/doc
+
+      - name: Build Quasar Documentation
+        continue-on-error: true
+        run: PYTHONPATH=${{ gitea.workspace }}/mkdocs-kit/src ${{ gitea.workspace }}/.venv-docs/bin/python3 ${{ gitea.workspace }}/mkdocs-kit/src/mkdocs_kit/cli.py build
+        working-directory: quasar/doc
+
+      - name: Copy Documentation to dist-packages
+        run: |
+          mkdir -p dist-packages/docs-nunki dist-packages/docs-quasar
+          cp nunki/doc/documentation.pdf dist-packages/nunki-documentation.pdf || true
+          cp -r nunki/doc/site dist-packages/docs-nunki/site || true
+          cp quasar/doc/documentation.pdf dist-packages/quasar-documentation.pdf || true
+          cp -r quasar/doc/site dist-packages/docs-quasar/site || true
+
+      - name: Upload Linux Packages & Containerfiles
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-${{ matrix.os }}
+          path: dist-packages/*

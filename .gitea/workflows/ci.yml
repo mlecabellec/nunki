@@ -1,0 +1,142 @@
+name: Gitea CI Pipeline
+
+on:
+  push:
+    branches: ["master", "main"]
+  pull_request:
+    branches: ["master", "main"]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & Test Nunki
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (Eclipse Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'src/main/frontend/package-lock.json'
+
+      - name: Build and Package with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Run Unit Tests
+        run: mvn test
+
+      - name: Upload Uber Jar Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nunki-jar
+          path: target/nunki-0.0.1-SNAPSHOT.jar
+
+  integration-test:
+    name: Quasar & Nunki Integration Test
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout Nunki
+        uses: actions/checkout@v4
+        with:
+          path: nunki
+
+      - name: Checkout Quasar
+        uses: actions/checkout@v4
+        with:
+          repository: m/quasar
+          github-server-url: ${{ gitea.server_url }}
+          path: quasar
+          token: ${{ gitea.token }}
+
+      - name: Prepare Quasar Build Context
+        run: |
+          mkdir -p quasar/quasar_server
+          cp -r nunki/quasar_server/* quasar/quasar_server/
+
+      - name: Build & Verify Container Stack
+        run: |
+          COMPOSE_CMD="docker compose"
+          command -v docker >/dev/null || COMPOSE_CMD="podman compose"
+          $COMPOSE_CMD -f nunki/helpers/docker-compose.yml build
+          $COMPOSE_CMD -f nunki/helpers/docker-compose.yml up -d
+          sleep 15
+          $COMPOSE_CMD -f nunki/helpers/docker-compose.yml ps
+          $COMPOSE_CMD -f nunki/helpers/docker-compose.yml logs quasar
+          $COMPOSE_CMD -f nunki/helpers/docker-compose.yml logs nunki
+
+      - name: Stop Container Stack
+        if: always()
+        run: |
+          COMPOSE_CMD="docker compose"
+          command -v docker >/dev/null || COMPOSE_CMD="podman compose"
+          $COMPOSE_CMD -f nunki/helpers/docker-compose.yml down
+
+  build-docs:
+    name: Build & Upload Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Checkout MkDocs Kit
+        uses: actions/checkout@v4
+        with:
+          repository: m/mkdocs-kit
+          github-server-url: ${{ gitea.server_url }}
+          path: mkdocs-kit
+          token: ${{ gitea.token }}
+
+      - name: Set up Java (required for PlantUML)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System Dependencies (PlantUML, Pango, Cairo)
+        run: |
+          SUDO=""
+          [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo"
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends plantuml libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libjpeg-dev libopenjp2-7-dev libffi-dev
+
+      - name: Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install "setuptools<82.0.0"
+          pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
+
+      - name: Build Documentation
+        run: PYTHONPATH=${{ gitea.workspace }}/mkdocs-kit/src python3 ${{ gitea.workspace }}/mkdocs-kit/src/mkdocs_kit/cli.py build
+        working-directory: doc
+
+      - name: Upload Documentation Site Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nunki-docs-site
+          path: doc/site/
+
+      - name: Upload PDF Manual Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nunki-docs-pdf
+          path: doc/documentation.pdf
