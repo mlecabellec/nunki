@@ -46,9 +46,9 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends curl wget gnupg sudo \
-                             ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
+                             build-essential ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
                              libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
-                             libgmp-dev libssl-dev uuid-dev binutils-dev zlib1g-dev libiberty-dev libzstd-dev \
+                             libgmp-dev libssl-dev libsasl2-dev uuid-dev binutils-dev libbfd-dev zlib1g-dev libiberty-dev libzstd-dev \
                              maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
           . /etc/os-release
           mkdir -p /etc/apt/keyrings
@@ -76,18 +76,39 @@ jobs:
           archlinux-java set java-21-openjdk || true
 
       - name: Checkout Nunki
-        uses: actions/checkout@v4
-        with:
-          github-server-url: https://gitea2.lecabellec.fr
-          path: nunki
+        shell: bash
+        env:
+          GITEA_TOKEN: ${{ gitea.token }}
+        run: |
+          rm -rf nunki
+          mkdir -p nunki
+          cd nunki
+          git config --global --add safe.directory "$PWD"
+          git init .
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "https://gitea2.lecabellec.fr/${{ gitea.repository }}.git"
+          if [ -n "${GITEA_TOKEN:-}" ]; then
+            AUTH_B64="$(printf 'x-access-token:%s' "$GITEA_TOKEN" | base64 | tr -d '\n')"
+            git -c "http.https://gitea2.lecabellec.fr/.extraheader=Authorization: Basic ${AUTH_B64}" \
+              fetch --no-tags --prune --depth=1 origin "${{ gitea.ref }}"
+          else
+            git fetch --no-tags --prune --depth=1 origin "${{ gitea.ref }}"
+          fi
+          git checkout --force "${{ gitea.sha }}" 2>/dev/null || git checkout --force FETCH_HEAD
 
       - name: Checkout Quasar
-        uses: actions/checkout@v4
-        with:
-          repository: m/quasar
-          github-server-url: https://gitea2.lecabellec.fr
-          path: quasar
-          token: ${{ gitea.token }}
+        shell: bash
+        env:
+          GITEA_TOKEN: ${{ gitea.token }}
+        run: |
+          rm -rf quasar
+          if [ -n "${GITEA_TOKEN:-}" ]; then
+            AUTH_B64="$(printf 'x-access-token:%s' "$GITEA_TOKEN" | base64 | tr -d '\n')"
+            git -c "http.https://gitea2.lecabellec.fr/.extraheader=Authorization: Basic ${AUTH_B64}" \
+              clone --depth=1 --recurse-submodules "https://gitea2.lecabellec.fr/m/quasar.git" quasar
+          else
+            git clone --depth=1 --recurse-submodules "https://gitea2.lecabellec.fr/m/quasar.git" quasar
+          fi
 
       - name: Build Nunki
         run: |
@@ -99,8 +120,13 @@ jobs:
         run: |
           cd quasar
           mkdir -p build-projects
-          cmake -S cmake-projects -B build-projects -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_SHARED_LINKER_FLAGS="-lzstd" -DCMAKE_EXE_LINKER_FLAGS="-lzstd"
-          cmake --build build-projects
+          cmake -S cmake-projects -B build-projects \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_POLICY_DEFAULT_CMP0000=NEW \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            -DCMAKE_SHARED_LINKER_FLAGS="-lzstd" \
+            -DCMAKE_EXE_LINKER_FLAGS="-lzstd"
+          cmake --build build-projects --parallel $(nproc)
           ../nunki/helpers/package-quasar.sh ${{ matrix.pkg_type }} ../dist-packages
 
       - name: Generate Distro Containerfiles
@@ -120,12 +146,18 @@ jobs:
           cp distro-dockerfiles/Dockerfile.quasar dist-packages/
 
       - name: Checkout MkDocs Kit
-        uses: actions/checkout@v4
-        with:
-          repository: m/mkdocs-kit
-          github-server-url: https://gitea2.lecabellec.fr
-          path: mkdocs-kit
-          token: ${{ gitea.token }}
+        shell: bash
+        env:
+          GITEA_TOKEN: ${{ gitea.token }}
+        run: |
+          rm -rf mkdocs-kit
+          if [ -n "${GITEA_TOKEN:-}" ]; then
+            AUTH_B64="$(printf 'x-access-token:%s' "$GITEA_TOKEN" | base64 | tr -d '\n')"
+            git -c "http.https://gitea2.lecabellec.fr/.extraheader=Authorization: Basic ${AUTH_B64}" \
+              clone --depth=1 "https://gitea2.lecabellec.fr/m/mkdocs-kit.git" mkdocs-kit
+          else
+            git clone --depth=1 "https://gitea2.lecabellec.fr/m/mkdocs-kit.git" mkdocs-kit
+          fi
 
       - name: Install Python dependencies for documentation
         run: |
