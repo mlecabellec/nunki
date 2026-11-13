@@ -11,10 +11,13 @@ jobs:
   build-and-test:
     name: Build & Test Nunki
     runs-on: ubuntu-latest
+    if: startsWith(gitea.server_url, 'https://gitea2.lecabellec.fr')
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          github-server-url: https://gitea2.lecabellec.fr
 
       - name: Set up JDK 21 (Eclipse Temurin)
         uses: actions/setup-java@v4
@@ -45,19 +48,21 @@ jobs:
   integration-test:
     name: Quasar & Nunki Integration Test
     runs-on: ubuntu-latest
+    if: startsWith(gitea.server_url, 'https://gitea2.lecabellec.fr')
     needs: build-and-test
 
     steps:
       - name: Checkout Nunki
         uses: actions/checkout@v4
         with:
+          github-server-url: https://gitea2.lecabellec.fr
           path: nunki
 
       - name: Checkout Quasar
         uses: actions/checkout@v4
         with:
           repository: m/quasar
-          github-server-url: ${{ gitea.server_url }}
+          github-server-url: https://gitea2.lecabellec.fr
           path: quasar
           token: ${{ gitea.token }}
 
@@ -87,16 +92,19 @@ jobs:
   build-docs:
     name: Build & Upload Documentation
     runs-on: ubuntu-latest
+    if: startsWith(gitea.server_url, 'https://gitea2.lecabellec.fr')
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          github-server-url: https://gitea2.lecabellec.fr
 
       - name: Checkout MkDocs Kit
         uses: actions/checkout@v4
         with:
           repository: m/mkdocs-kit
-          github-server-url: ${{ gitea.server_url }}
+          github-server-url: https://gitea2.lecabellec.fr
           path: mkdocs-kit
           token: ${{ gitea.token }}
 
@@ -117,17 +125,18 @@ jobs:
           SUDO=""
           [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo"
           $SUDO apt-get update
-          $SUDO apt-get install -y --no-install-recommends plantuml libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libjpeg-dev libopenjp2-7-dev libffi-dev
+          $SUDO apt-get install -y --no-install-recommends plantuml graphviz libpango-1.0-0 libharfbuzz0b libpangoft2-1.0-0 libjpeg-dev libopenjp2-7-dev libffi-dev libxml2-dev libxslt1-dev
 
       - name: Install Python Dependencies
         run: |
           pip install --upgrade pip
           pip install "setuptools<82.0.0"
-          pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
+          pip install ./mkdocs-kit
 
       - name: Build Documentation
-        run: PYTHONPATH=${{ gitea.workspace }}/mkdocs-kit/src python3 ${{ gitea.workspace }}/mkdocs-kit/src/mkdocs_kit/cli.py build
-        working-directory: doc
+        run: |
+          cd doc
+          mkdocs-kit build
 
       - name: Upload Documentation Site Artifact
         uses: actions/upload-artifact@v3

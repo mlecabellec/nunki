@@ -10,6 +10,7 @@ jobs:
   package:
     name: Package on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    if: startsWith(gitea.server_url, 'https://gitea2.lecabellec.fr')
     strategy:
       fail-fast: false
       matrix:
@@ -77,13 +78,14 @@ jobs:
       - name: Checkout Nunki
         uses: actions/checkout@v4
         with:
+          github-server-url: https://gitea2.lecabellec.fr
           path: nunki
 
       - name: Checkout Quasar
         uses: actions/checkout@v4
         with:
           repository: m/quasar
-          github-server-url: ${{ gitea.server_url }}
+          github-server-url: https://gitea2.lecabellec.fr
           path: quasar
           token: ${{ gitea.token }}
 
@@ -121,7 +123,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: m/mkdocs-kit
-          github-server-url: ${{ gitea.server_url }}
+          github-server-url: https://gitea2.lecabellec.fr
           path: mkdocs-kit
           token: ${{ gitea.token }}
 
@@ -130,16 +132,16 @@ jobs:
           python3 -m venv .venv-docs
           .venv-docs/bin/pip install --upgrade pip
           .venv-docs/bin/pip install "setuptools<82.0.0"
-          .venv-docs/bin/pip install mkdocs mkdocs-material weasyprint wireviz nwdiag bit_field
+          .venv-docs/bin/pip install ./mkdocs-kit
 
       - name: Build Nunki Documentation
         continue-on-error: true
-        run: PYTHONPATH=${{ gitea.workspace }}/mkdocs-kit/src ${{ gitea.workspace }}/.venv-docs/bin/python3 ${{ gitea.workspace }}/mkdocs-kit/src/mkdocs_kit/cli.py build
+        run: ${{ gitea.workspace }}/.venv-docs/bin/mkdocs-kit build
         working-directory: nunki/doc
 
       - name: Build Quasar Documentation
         continue-on-error: true
-        run: PYTHONPATH=${{ gitea.workspace }}/mkdocs-kit/src ${{ gitea.workspace }}/.venv-docs/bin/python3 ${{ gitea.workspace }}/mkdocs-kit/src/mkdocs_kit/cli.py build
+        run: ${{ gitea.workspace }}/.venv-docs/bin/mkdocs-kit build
         working-directory: quasar/doc
 
       - name: Copy Documentation to dist-packages
