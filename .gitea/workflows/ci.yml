@@ -56,8 +56,15 @@ jobs:
             fi
           done
 
+      - name: Install Maven
+        run: |
+          SUDO=""
+          [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null && SUDO="sudo"
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends maven
+
       - name: Set up JDK 21 (Eclipse Temurin)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
@@ -232,7 +239,7 @@ jobs:
           done
 
       - name: Set up Java (required for PlantUML)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
