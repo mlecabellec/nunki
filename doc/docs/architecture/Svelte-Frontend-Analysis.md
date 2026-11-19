@@ -119,7 +119,7 @@ Shows the physical topology of the full-stack system, placing components within 
 
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 node "Client Machine (Web Browser)" {
     component "Svelte 5 App" {
         component "Navbar" as Nav
@@ -175,7 +175,7 @@ Describes the actions an Industrial Operator can perform via the Nunki dashboard
 
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 left to right direction
 actor "Industrial Operator" as User
 
@@ -229,7 +229,7 @@ Handles dashboard mounting, establishing WebSocket and STOMP connections, and fo
 #### Sequence Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 actor User
 boundary "Svelte Frontend (UI)" as UI
 control "websocket.svelte.ts\n(STOMP Client)" as WS
@@ -256,7 +256,7 @@ UI -> User : Render new value with neon flash highlight
 #### Activity Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 start
 :Mount Svelte Dashboard;
 :Initiate STOMP client connection;
@@ -286,7 +286,7 @@ Handles modifications to live OPC-UA variables initiated by the user.
 #### Sequence Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 actor User
 boundary "OpcUaTreeNode.svelte" as UI
 control "websocket.svelte.ts" as WS
@@ -315,7 +315,7 @@ end
 #### Activity Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 start
 :User edits Variable node;
 :Infer data type based on name and value string;
@@ -342,7 +342,7 @@ Handles method executions on the remote OPC-UA server.
 #### Sequence Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 actor User
 boundary "OpcUaTreeNode.svelte" as UI
 control "websocket.svelte.ts" as WS
@@ -366,7 +366,7 @@ UI -> User : Display output result in badge
 #### Activity Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 start
 :User clicks Invoke Method;
 :Send HTTP POST to /api/opcua/invoke;
@@ -394,7 +394,7 @@ Coordinates network connectivity checks.
 #### Sequence Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 actor User
 boundary "App.svelte" as UI
 control "websocket.svelte.ts" as WS
@@ -417,7 +417,7 @@ UI -> User : Render new pong entry in Response Logs console
 #### Activity Diagram:
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 start
 :User enters ping text;
 :Click Send Ping or trigger Auto Ping;
@@ -445,7 +445,7 @@ This layout diagram shows how Svelte components are instantiated and visually or
 
 ```plantuml
 @startuml
-scale max 600 width
+scale max 600*900
 rectangle "App.svelte Layout" {
     rectangle "Navbar.svelte (Sticky Top Header)" as Nav {
         rectangle "Logo (N Nunki Dashboard)" as Logo
