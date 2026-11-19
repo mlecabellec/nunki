@@ -10,7 +10,9 @@ on:
 jobs:
   package:
     name: Package on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.base_image }}
     if: >-
       (startsWith(gitea.server_url, 'https://gitea2.lecabellec.fr') ||
       gitea.event_name == 'workflow_dispatch') &&
@@ -114,12 +116,39 @@ jobs:
           path: nunki
 
       - name: Checkout Quasar
-        uses: actions/checkout@v4
-        with:
-          repository: m/quasar
-          path: quasar
-          submodules: recursive
-          token: ${{ gitea.token }}
+        shell: bash
+        env:
+          GITEA_SERVER: ${{ gitea.server_url }}
+          GITEA_CLONE_TOKEN: ${{ secrets.QUASAR_READ_TOKEN || secrets.GITEA_CLEANUP_TOKEN || gitea.token }}
+        run: |
+          set -euo pipefail
+          rm -rf quasar
+          ASKPASS_SCRIPT="$(mktemp)"
+          trap 'rm -f "${ASKPASS_SCRIPT}"' EXIT
+          cat > "${ASKPASS_SCRIPT}" <<'EOF'
+          #!/bin/sh
+          case "$1" in
+            *Username*) printf '%s\n' "x-access-token" ;;
+            *Password*) printf '%s\n' "${GITEA_CLONE_TOKEN}" ;;
+          esac
+          EOF
+          chmod 700 "${ASKPASS_SCRIPT}"
+          CLONED=false
+          if [ -n "${GITEA_CLONE_TOKEN:-}" ]; then
+            echo "Attempting shallow clone from ${GITEA_SERVER}/m/quasar.git..."
+            if GIT_TERMINAL_PROMPT=0 GIT_ASKPASS="${ASKPASS_SCRIPT}" \
+              git -c http.sslVerify=false clone --depth=1 --recursive \
+              "${GITEA_SERVER}/m/quasar.git" quasar; then
+              CLONED=true
+            else
+              echo "Gitea clone unavailable; falling back to public GitHub mirror."
+              rm -rf quasar
+            fi
+          fi
+          if [ "${CLONED}" != "true" ]; then
+            git clone --depth=1 --recursive https://github.com/mlecabellec/quasar.git quasar
+          fi
+          git -C quasar log -1 --oneline
 
       - name: "Diagnostic: Workspace & Toolchain Check"
         run: |
