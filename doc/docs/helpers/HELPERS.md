@@ -5,16 +5,16 @@ This directory contains a suite of utility and orchestrator scripts to build, te
 ---
 
 ## Table of Contents
-1. [Prerequisites & System Setup](#prerequisites--system-setup)
+1. [Prerequisites & System Setup](#prerequisites-system-setup)
 2. [Standalone Execution (`run-standalone.sh`)](#1-standalone-execution-run-standalonesh)
 3. [Embedded OPC-UA Shortcuts](#2-embedded-opc-ua-shortcuts)
 4. [Multi-Container Orchestration (`run-integrated.sh`)](#3-multi-container-orchestration-run-integratedsh)
-5. [Documentation Builder & Link Checker](#4-documentation-builder--link-checker)
-6. [Packaging Scripts (`package.sh` & `package-quasar.sh`)](#5-packaging-scripts-packagesh--package-quasarsh)
+5. [Documentation Builder & Link Checker](#4-documentation-builder-link-checker)
+6. [Packaging Scripts (`package.sh` & `package-quasar.sh`)](#5-packaging-scripts-packagesh-package-quasarsh)
 7. [GitHub Actions Workflow Watchers](#6-github-actions-workflow-watchers)
 8. [Step-by-Step Guides](#7-step-by-step-guides)
     - [Running Nunki Standalone with the Embedded OPC-UA Server](#running-nunki-standalone-with-the-embedded-opc-ua-server)
-    - [Running Nunki in Containers (Build & Run)](#running-nunki-in-containers-build--run)
+    - [Running Nunki in Containers (Build & Run)](#running-nunki-in-containers-build-run)
 
 ---
 
