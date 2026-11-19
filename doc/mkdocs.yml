@@ -50,3 +50,5 @@ nav:
       - "ADR-0010: Introduce Mockito": docs/adr/ADR-0010.md
   - Reports:
       - Initialization Report: reports/INITIALIZATION_REPORT.md
+  - Project Tasks:
+      - "TSK-20261119-001 Gitea2 CI Multi-OS Packaging & Docs Follow-Up": tasks/TSK-20261119-001.md

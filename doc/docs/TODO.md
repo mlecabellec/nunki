@@ -15,6 +15,7 @@
 - [ ] **[TSK-20260804-004]** Integration test protocols with the Quasar project
 - [ ] **[TSK-20260804-005]** Configure authentication backends (LDAP and Kerberos support)
 - [ ] **[TSK-20260804-006]** MongoDB connection string configurations and dockerized scaling
+- [ ] **[TSK-20261119-001](tasks/TSK-20261119-001.md)** Gitea2 CI multi-OS `package.yml` live verification, `MKDOCS_KIT_TOKEN` cross-repo docs setup, and `[WIP]` history cleanup
 
 ## ✅ Recently Completed
 - [x] **[TSK-20260513-001]** Spring Boot 3 & Java 21 environment setup
