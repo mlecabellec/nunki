@@ -7,6 +7,10 @@ on:
       - 'release-*'
   workflow_dispatch:
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   package:
     name: Package on ${{ matrix.os }}
@@ -25,6 +29,7 @@ jobs:
       contains(gitea.event.commits[0].message, 'RELEASE_ARTIFACTS'))
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - os: debian-12
@@ -66,7 +71,10 @@ jobs:
 
       - name: Install Node.js and Git Prerequisites (Debian)
         if: matrix.os == 'debian-12' || matrix.os == 'debian-13'
-        run: apt-get update && apt-get install -y --no-install-recommends nodejs git ca-certificates
+        run: |
+          APT_OPTS=(-o Acquire::ForceIPv4=true -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          apt-get "${APT_OPTS[@]}" -o APT::Update::Error-Mode=any update || apt-get "${APT_OPTS[@]}" update || true
+          apt-get "${APT_OPTS[@]}" install -y --no-install-recommends nodejs git ca-certificates
 
       - name: Install Node.js and Git Prerequisites (Arch Linux)
         if: matrix.os == 'archlinux'
@@ -79,17 +87,19 @@ jobs:
       - name: Install Build Dependencies (Debian)
         if: matrix.os == 'debian-12' || matrix.os == 'debian-13'
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends curl wget gnupg sudo \
+          APT_OPTS=(-o Acquire::ForceIPv4=true -o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          apt-get "${APT_OPTS[@]}" -o APT::Update::Error-Mode=any update || apt-get "${APT_OPTS[@]}" update || true
+          apt-get "${APT_OPTS[@]}" install -y --no-install-recommends curl wget gnupg sudo \
                              build-essential ccache cmake g++ make pkg-config python3 file linux-headers-amd64 \
                              libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev \
                              libgmp-dev libssl-dev libsasl2-dev uuid-dev binutils-dev libbfd-dev zlib1g-dev libiberty-dev libzstd-dev \
-                             maven dpkg-dev python3-pip python3-venv plantuml libpango-1.0-0
+                             maven dpkg-dev python3-pip python3-venv plantuml fonts-noto-color-emoji libpango-1.0-0
           . /etc/os-release
           mkdir -p /etc/apt/keyrings
           wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc >/dev/null
           echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb ${VERSION_CODENAME:-bookworm} main" | tee /etc/apt/sources.list.d/adoptium.list
-          apt-get update && apt-get install -y --no-install-recommends temurin-21-jdk || apt-get install -y --no-install-recommends openjdk-21-jdk
+          apt-get "${APT_OPTS[@]}" -o APT::Update::Error-Mode=any update || apt-get "${APT_OPTS[@]}" update || true
+          apt-get "${APT_OPTS[@]}" install -y --no-install-recommends temurin-21-jdk || apt-get "${APT_OPTS[@]}" install -y --no-install-recommends openjdk-21-jdk
 
       - name: Install Build Dependencies (Fedora)
         if: matrix.os == 'fedora'
@@ -98,7 +108,7 @@ jobs:
                          alsa-lib-devel libX11-devel libXrandr-devel libXi-devel \
                          mesa-libGL-devel mesa-libGLU-devel libXcursor-devel libXinerama-devel \
                          gmp-devel openssl-devel libuuid-devel zlib-devel binutils-devel libzstd-devel \
-                         java-21-openjdk-devel maven rpm-build python3-pip plantuml pango cairo
+                         java-latest-openjdk-devel maven rpm-build python3-pip plantuml google-noto-color-emoji-fonts pango cairo
 
       - name: Install Build Dependencies (Arch Linux)
         if: matrix.os == 'archlinux'
@@ -106,7 +116,7 @@ jobs:
           pacman -S --needed --noconfirm \
                          curl sudo base-devel ccache cmake python file \
                          alsa-lib libx11 libxrandr libxi mesa glu libxcursor libxinerama \
-                         gmp openssl util-linux-libs zlib binutils jdk21-openjdk maven npm python-pip plantuml pango cairo \
+                         gmp openssl util-linux-libs zlib binutils jdk21-openjdk maven npm python-pip plantuml noto-fonts-emoji pango cairo \
                          cantarell-fonts gnu-free-fonts zstd
           archlinux-java set java-21-openjdk || true
 
@@ -194,6 +204,8 @@ jobs:
           ccache -z || true
           cmake -S cmake-projects -B build-projects \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_FLAGS_RELEASE="-O1 -DNDEBUG" \
+            -DCMAKE_C_FLAGS_RELEASE="-O1 -DNDEBUG" \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_POLICY_DEFAULT_CMP0000=NEW \
@@ -201,13 +213,33 @@ jobs:
             -DCMAKE_SHARED_LINKER_FLAGS="-lzstd" \
             -DCMAKE_EXE_LINKER_FLAGS="-lzstd"
           CPUS=$(nproc 2>/dev/null || echo 2)
-          MEM_AVAIL_KB=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
-          # Reserve ~4 GiB per concurrent C++23 -O3 compilation slot (0B swap on runner), capped at 2
-          MEM_JOBS=$(( MEM_AVAIL_KB / 4194304 ))
-          if [ "$MEM_JOBS" -lt 1 ]; then MEM_JOBS=1; fi
-          BUILD_JOBS=$(( CPUS < MEM_JOBS ? CPUS : MEM_JOBS ))
-          if [ "$BUILD_JOBS" -gt 2 ]; then BUILD_JOBS=2; fi
-          echo "Quasar build parallelism: BUILD_JOBS=$BUILD_JOBS (nproc=$CPUS, MemAvailable=${MEM_AVAIL_KB}kB)"
+          PROC_AVAIL_KB=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+          CGROUP_AVAIL_KB=$PROC_AVAIL_KB
+          if [ -r /sys/fs/cgroup/memory.max ]; then
+            CG_MAX=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)
+            CG_CUR=$(cat /sys/fs/cgroup/memory.current 2>/dev/null || echo 0)
+            if [ "$CG_MAX" != "max" ] && [ "$CG_MAX" -gt 0 ] 2>/dev/null; then
+              CGROUP_AVAIL_KB=$(( (CG_MAX - CG_CUR) / 1024 ))
+            fi
+          elif [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+            CG_MAX=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo 0)
+            CG_CUR=$(cat /sys/fs/cgroup/memory/memory.usage_in_bytes 2>/dev/null || echo 0)
+            if [ "$CG_MAX" -gt 0 ] 2>/dev/null && [ "$CG_MAX" -lt 9000000000000000 ] 2>/dev/null; then
+              CGROUP_AVAIL_KB=$(( (CG_MAX - CG_CUR) / 1024 ))
+            fi
+          fi
+          MEM_AVAIL_KB=$(( PROC_AVAIL_KB < CGROUP_AVAIL_KB ? PROC_AVAIL_KB : CGROUP_AVAIL_KB ))
+          if [ "$MEM_AVAIL_KB" -lt 0 ]; then MEM_AVAIL_KB=0; fi
+          # Cap BUILD_JOBS=1 whenever effective RAM is <=10 GiB (handles 8 GiB runner cgroup limits)
+          if [ "$MEM_AVAIL_KB" -le 10485760 ]; then
+            BUILD_JOBS=1
+          else
+            MEM_JOBS=$(( MEM_AVAIL_KB / 4194304 ))
+            if [ "$MEM_JOBS" -lt 1 ]; then MEM_JOBS=1; fi
+            BUILD_JOBS=$(( CPUS < MEM_JOBS ? CPUS : MEM_JOBS ))
+            if [ "$BUILD_JOBS" -gt 2 ]; then BUILD_JOBS=2; fi
+          fi
+          echo "Quasar build parallelism: BUILD_JOBS=$BUILD_JOBS (nproc=$CPUS, procAvail=${PROC_AVAIL_KB}kB, effAvail=${MEM_AVAIL_KB}kB)"
           free -h || true
           cmake --build build-projects --target liblua quasar_coretypes quasar_named utils --parallel "$BUILD_JOBS" --verbose
           # Build sol2-heavy quasar_scripting sequentially so RegistryBindings.cpp has full RAM headroom
@@ -224,7 +256,7 @@ jobs:
             printf 'FROM %s\nRUN apt-get update && apt-get install -y openjdk-21-jre-headless && rm -rf /var/lib/apt/lists/*\nCOPY nunki_*.deb /tmp/\nRUN dpkg -i /tmp/nunki_*.deb || apt-get install -f -y\nEXPOSE 8080\nENTRYPOINT ["/usr/bin/nunki"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.nunki
             printf 'FROM %s\nRUN apt-get update && apt-get install -y libssl3 libuuid1 zlib1g && rm -rf /var/lib/apt/lists/*\nCOPY quasar_*.deb /tmp/\nRUN dpkg -i /tmp/quasar_*.deb || apt-get install -f -y\nEXPOSE 4840\nENTRYPOINT ["/usr/bin/quasar_server"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.quasar
           elif [ "${{ matrix.pkg_type }}" = "rpm" ]; then
-            printf 'FROM %s\nRUN dnf install -y java-21-openjdk-headless && dnf clean all\nCOPY nunki-*.rpm /tmp/\nRUN dnf localinstall -y /tmp/nunki-*.rpm\nEXPOSE 8080\nENTRYPOINT ["/usr/bin/nunki"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.nunki
+            printf 'FROM %s\nRUN dnf install -y java-latest-openjdk-headless && dnf clean all\nCOPY nunki-*.rpm /tmp/\nRUN dnf localinstall -y /tmp/nunki-*.rpm\nEXPOSE 8080\nENTRYPOINT ["/usr/bin/nunki"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.nunki
             printf 'FROM %s\nRUN dnf install -y openssl zlib libuuid && dnf clean all\nCOPY quasar-*.rpm /tmp/\nRUN dnf localinstall -y /tmp/quasar-*.rpm\nEXPOSE 4840\nENTRYPOINT ["/usr/bin/quasar_server"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.quasar
           elif [ "${{ matrix.pkg_type }}" = "arch" ]; then
             printf 'FROM %s\nCOPY nunki-*.pkg.tar.zst /tmp/\nRUN pacman -Syu --noconfirm && pacman -U --noconfirm /tmp/nunki-*.pkg.tar.zst && pacman -Scc --noconfirm\nEXPOSE 8080\nENTRYPOINT ["/usr/bin/nunki"]\n' "${{ matrix.base_image }}" > distro-dockerfiles/Dockerfile.nunki
@@ -234,9 +266,27 @@ jobs:
           cp distro-dockerfiles/Dockerfile.quasar dist-packages/
 
       - name: Checkout MkDocs Kit
+        env:
+          GITEA_SERVER_URL: ${{ gitea.server_url }}
+          GITEA_CLONE_TOKEN: ${{ secrets.MKDOCS_KIT_TOKEN || secrets.GITEA_CLEANUP_TOKEN || gitea.token }}
         run: |
           rm -rf mkdocs-kit
-          git clone --depth=1 https://github.com/mlecabellec/mkdocs-kit.git mkdocs-kit
+          GITEA_BASE="${GITEA_SERVER_URL%/}"
+          GITEA_BASE="${GITEA_BASE:-https://gitea2.lecabellec.fr}"
+          CLONE_OK=0
+          if [ -n "${GITEA_CLONE_TOKEN:-}" ]; then
+            ASKPASS_SCRIPT=$(mktemp)
+            printf '#!/bin/sh\ncase "$1" in\n  *Username*) printf "%%s\\n" "x-access-token" ;;\n  *) printf "%%s\\n" "${GITEA_CLONE_TOKEN}" ;;\nesac\n' > "$ASKPASS_SCRIPT"
+            chmod +x "$ASKPASS_SCRIPT"
+            if GIT_ASKPASS="$ASKPASS_SCRIPT" GIT_TERMINAL_PROMPT=0 git clone --depth=1 "${GITEA_BASE}/m/mkdocs-kit.git" mkdocs-kit; then
+              CLONE_OK=1
+            fi
+            rm -f "$ASKPASS_SCRIPT"
+          fi
+          if [ "$CLONE_OK" -eq 0 ]; then
+            GIT_TERMINAL_PROMPT=0 git clone --depth=1 "${GITEA_BASE}/m/mkdocs-kit.git" mkdocs-kit || \
+              git clone --depth=1 https://github.com/mlecabellec/mkdocs-kit.git mkdocs-kit
+          fi
 
       - name: Install Python dependencies for documentation
         run: |
@@ -264,7 +314,7 @@ jobs:
           cp -r quasar/doc/site dist-packages/docs-quasar/site || true
 
       - name: Upload Linux Packages & Containerfiles
-        uses: actions/upload-artifact@v3
+        uses: https://gitea.com/actions/gitea-upload-artifact@v4
         with:
           name: release-${{ matrix.os }}
           path: dist-packages/*

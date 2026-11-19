@@ -29,35 +29,35 @@ src/main/frontend/
 ```
 
 ### Key Java Backend Architecture Files:
-* [NunkiApplication.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/NunkiApplication.java): Main Spring Boot application entry point.
-* [PingController.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/controller/PingController.java): Receives client websocket messages on `/app/ping` and replies to `/topic/ping-response`.
-* [OpcUaController.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/controller/OpcUaController.java): Exposes REST HTTP API endpoints for browsing the address space, writing node values, and invoking method nodes.
-* [OpcUaWiringService.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/opcua/service/OpcUaWiringService.java): Coordinates connections, browses tree on startup, registers subscription monitors on variable nodes, and forwards updates to `/topic/opcua-tree` via the STOMP template.
-* [OpcUaClientService.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/opcua/service/OpcUaClientService.java): Wraps the Eclipse Milo OPC UA client implementation (browse, read, write, call).
-* [ConnectionManager.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/opcua/connection/ConnectionManager.java): Configures and monitors connection handshakes.
-* [SubscriptionManager.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/opcua/subscription/SubscriptionManager.java): Manages active Milo subscription monitors.
-* [RequestQueue.java](file:///home/vortigern/git/nunki/src/main/java/com/example/nunki/opcua/queue/RequestQueue.java): Prevents race conditions by queuing concurrent write/call operations.
+* `NunkiApplication.java` (`src/main/java/com/example/nunki/NunkiApplication.java`): Main Spring Boot application entry point.
+* `PingController.java` (`src/main/java/com/example/nunki/controller/PingController.java`): Receives client websocket messages on `/app/ping` and replies to `/topic/ping-response`.
+* `OpcUaController.java` (`src/main/java/com/example/nunki/controller/OpcUaController.java`): Exposes REST HTTP API endpoints for browsing the address space, writing node values, and invoking method nodes.
+* `OpcUaWiringService.java` (`src/main/java/com/example/nunki/opcua/service/OpcUaWiringService.java`): Coordinates connections, browses tree on startup, registers subscription monitors on variable nodes, and forwards updates to `/topic/opcua-tree` via the STOMP template.
+* `OpcUaClientService.java` (`src/main/java/com/example/nunki/opcua/service/OpcUaClientService.java`): Wraps the Eclipse Milo OPC UA client implementation (browse, read, write, call).
+* `ConnectionManager.java` (`src/main/java/com/example/nunki/opcua/connection/ConnectionManager.java`): Configures and monitors connection handshakes.
+* `SubscriptionManager.java` (`src/main/java/com/example/nunki/opcua/subscription/SubscriptionManager.java`): Manages active Milo subscription monitors.
+* `RequestQueue.java` (`src/main/java/com/example/nunki/opcua/queue/RequestQueue.java`): Prevents race conditions by queuing concurrent write/call operations.
 
 ---
 
 ## 2. Component Design & Architectural Roles
 
-### A. Bootstrapping Entry Point ([main.ts](file:///home/vortigern/git/nunki/src/main/frontend/src/main.ts))
+### A. Bootstrapping Entry Point (`main.ts` (`src/main/frontend/src/main.ts`))
 * **Role**: Bootstraps Svelte 5.
-* **Design & Logic**: Utilizes the modern `mount()` function of Svelte 5 to mount the root [App.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/App.svelte) component onto the HTML container (`#app`) using non-null assertion.
+* **Design & Logic**: Utilizes the modern `mount()` function of Svelte 5 to mount the root `App.svelte` (`src/main/frontend/src/App.svelte`) component onto the HTML container (`#app`) using non-null assertion.
 
-### B. Global Theme & Styling System ([app.css](file:///home/vortigern/git/nunki/src/main/frontend/src/app.css))
+### B. Global Theme & Styling System (`app.css` (`src/main/frontend/src/app.css`))
 * **Role**: Visual design system definition.
 * **Design & Logic**: Contains CSS variable tokens specifying color, typography, background gradients, and border-radius. Leverages `@media (prefers-color-scheme: dark)` to automate responsive dark-mode styling configurations.
 
-### C. Application Router Shell ([App.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/App.svelte))
+### C. Application Router Shell (`App.svelte` (`src/main/frontend/src/App.svelte`))
 * **Role**: Main layout grid, reactive state shell, and page router.
 * **Design & Logic**:
   * **Routing**: Evaluates `activeTab` to display the active view pane (`home`, `diagrams`, `timeseries`, `values-list`, `values-search`, `tree`, `automation-lua`).
   * **Networking Lifecycle**: Triggers `wsManager.connect()` inside `onMount` and disconnects sockets inside `onDestroy`.
   * **Modals Controller**: Manages modals (`login`, `logout`, `profile`) by modifying `userAction` state.
 
-### D. WebSocket & STOMP Coordinator ([websocket.svelte.ts](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/websocket.svelte.ts))
+### D. WebSocket & STOMP Coordinator (`websocket.svelte.ts` (`src/main/frontend/src/lib/websocket.svelte.ts`))
 * **Role**: Full-stack async networking service.
 * **Design & Logic**:
   * Encapsulates the `@stomp/stompjs` client connection to `ws://localhost:8080/ws-stomp` (dynamically compiled based on host port).
@@ -67,13 +67,13 @@ src/main/frontend/
     * `/topic/opcua-tree` - Map-updates incoming OPC-UA value shifts into the dictionary.
   * Provides async REST methods `writeOpcUaValue()` (POST to `/api/opcua/write`) and `invokeOpcUaMethod()` (POST to `/api/opcua/invoke`).
 
-### E. Navigation dropdown Header ([Navbar.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/Navbar.svelte))
+### E. Navigation dropdown Header (`Navbar.svelte` (`src/main/frontend/src/lib/Navbar.svelte`))
 * **Role**: Interactive Header navigation bar.
 * **Design & Logic**:
   * Renders top header navigation controls with Lucide icons.
   * Registers a window event listener in `onMount` that intercepts window clicks. If a click target falls outside `.nav-item`, automatically collapses open dropdown submenus.
 
-### F. Collapsible Hierarchical Node Navigator ([OpcUaTreeNode.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/OpcUaTreeNode.svelte))
+### F. Collapsible Hierarchical Node Navigator (`OpcUaTreeNode.svelte` (`src/main/frontend/src/lib/OpcUaTreeNode.svelte`))
 * **Role**: Recursive tree viewer for the OPC-UA address space.
 * **Design & Logic**:
   * Recursively references itself for nested branches.
@@ -83,14 +83,14 @@ src/main/frontend/
     * `Method` -> Lightning symbol invocation trigger and result display.
   * Triggers highlight flashes using an `$effect` block linked to shifts in the `liveValue` derived state.
 
-### G. SVG Process Mimic Simulator ([SynopticView.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/SynopticView.svelte))
+### G. SVG Process Mimic Simulator (`SynopticView.svelte` (`src/main/frontend/src/lib/SynopticView.svelte`))
 * **Role**: Industrial human-machine interface (HMI).
 * **Design & Logic**:
   * Renders inline SVGs of Storage Tank T-101, pipes, Feed Pump, and Drain Valve.
   * Connects an animation loop using `$effect` that shifts pipeline stroke dash offsets and rotates pump impeller blades when operational.
   * Binds Enter/Space keyboard event listeners to the valve graphical container for accessibility.
 
-### H. SVG Telemetry Visualizer ([TimeSeriesChart.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/TimeSeriesChart.svelte))
+### H. SVG Telemetry Visualizer (`TimeSeriesChart.svelte` (`src/main/frontend/src/lib/TimeSeriesChart.svelte`))
 * **Role**: Real-time line chart plotting.
 * **Design & Logic**:
   * Avoids heavy external charting libraries by scaling data points to pixel values within the SVG viewport using mathematical linear interpolation.
@@ -119,6 +119,7 @@ Shows the physical topology of the full-stack system, placing components within 
 
 ```plantuml
 @startuml
+scale max 600 width
 node "Client Machine (Web Browser)" {
     component "Svelte 5 App" {
         component "Navbar" as Nav
@@ -174,6 +175,7 @@ Describes the actions an Industrial Operator can perform via the Nunki dashboard
 
 ```plantuml
 @startuml
+scale max 600 width
 left to right direction
 actor "Industrial Operator" as User
 
@@ -227,6 +229,7 @@ Handles dashboard mounting, establishing WebSocket and STOMP connections, and fo
 #### Sequence Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 actor User
 boundary "Svelte Frontend (UI)" as UI
 control "websocket.svelte.ts\n(STOMP Client)" as WS
@@ -253,6 +256,7 @@ UI -> User : Render new value with neon flash highlight
 #### Activity Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 start
 :Mount Svelte Dashboard;
 :Initiate STOMP client connection;
@@ -282,6 +286,7 @@ Handles modifications to live OPC-UA variables initiated by the user.
 #### Sequence Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 actor User
 boundary "OpcUaTreeNode.svelte" as UI
 control "websocket.svelte.ts" as WS
@@ -310,6 +315,7 @@ end
 #### Activity Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 start
 :User edits Variable node;
 :Infer data type based on name and value string;
@@ -336,6 +342,7 @@ Handles method executions on the remote OPC-UA server.
 #### Sequence Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 actor User
 boundary "OpcUaTreeNode.svelte" as UI
 control "websocket.svelte.ts" as WS
@@ -359,6 +366,7 @@ UI -> User : Display output result in badge
 #### Activity Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 start
 :User clicks Invoke Method;
 :Send HTTP POST to /api/opcua/invoke;
@@ -386,6 +394,7 @@ Coordinates network connectivity checks.
 #### Sequence Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 actor User
 boundary "App.svelte" as UI
 control "websocket.svelte.ts" as WS
@@ -408,6 +417,7 @@ UI -> User : Render new pong entry in Response Logs console
 #### Activity Diagram:
 ```plantuml
 @startuml
+scale max 600 width
 start
 :User enters ping text;
 :Click Send Ping or trigger Auto Ping;
@@ -435,6 +445,7 @@ This layout diagram shows how Svelte components are instantiated and visually or
 
 ```plantuml
 @startuml
+scale max 600 width
 rectangle "App.svelte Layout" {
     rectangle "Navbar.svelte (Sticky Top Header)" as Nav {
         rectangle "Logo (N Nunki Dashboard)" as Logo

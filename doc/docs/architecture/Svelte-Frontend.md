@@ -33,11 +33,11 @@ src/main/frontend/
 ## 2. Component Analysis & Logic Details
 
 ### A. Bootstrapping Entry Point (`main.ts`)
-* **File path**: [src/main/frontend/src/main.ts](file:///home/vortigern/git/nunki/src/main/frontend/src/main.ts)
+* **File path**: `src/main/frontend/src/main.ts`
 * **Design & Logic**: Utilizes the modern Svelte 5 `mount()` function to bind the root `App.svelte` layout directly to the element with ID `app` in `index.html`. It asserts the container target exists using the non-null assertion operator `!`, avoiding initial mounting null runtime exceptions.
 
 ### B. Global Styling & Responsive Variable Tokens (`app.css`)
-* **File path**: [src/main/frontend/src/app.css](file:///home/vortigern/git/nunki/src/main/frontend/src/app.css)
+* **File path**: `src/main/frontend/src/app.css`
 * **Design & Logic**: Declares CSS variable tokens that adjust automatically based on user layout preferences (`@media (prefers-color-scheme: dark)`). Integrates custom styling parameters:
   * `--bg`: Page background.
   * `--text`: Paragraph layout description colors.
@@ -46,7 +46,7 @@ src/main/frontend/
   * Defines custom typography using standard browser defaults (`system-ui`, `Segoe UI`, `monospace`) mapped inside `--sans`, `--heading`, and `--mono`.
 
 ### C. Application Router Shell (`App.svelte`)
-* **File path**: [src/main/frontend/src/App.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/App.svelte)
+* **File path**: `src/main/frontend/src/App.svelte`
 * **Design & Logic**:
   1. **Routing and View Modes**: Maps an active navigation string `activeTab` to display corresponding layouts:
      * `home`: Renders manual ping text boxes, STOMP client auto-pinger toggles, and response list logs.
@@ -61,7 +61,7 @@ src/main/frontend/
   4. **Modals Controller**: Manages login/logout overlays by capturing event clicks.
 
 ### D. WebSocket & STOMP Networking Manager (`websocket.svelte.ts`)
-* **File path**: [src/main/frontend/src/lib/websocket.svelte.ts](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/websocket.svelte.ts)
+* **File path**: `src/main/frontend/src/lib/websocket.svelte.ts`
 * **Design & Logic**:
   1. Encapsulates `@stomp/stompjs` client connectivity. Employs Svelte 5 `$state` runes on properties `connected` (boolean), `pongs` (array), and `opcUaUpdates` (key-value dictionary).
   2. Resolves CORS port redirects when running under dev HMR servers (ports `5173` vs `8080`).
@@ -73,14 +73,14 @@ src/main/frontend/
      * `invokeOpcUaMethod(objectId, methodId, args)`: POSTs to `/api/opcua/invoke`.
 
 ### E. Navigation Header dropdowns (`Navbar.svelte`)
-* **File path**: [src/main/frontend/src/lib/Navbar.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/Navbar.svelte)
+* **File path**: `src/main/frontend/src/lib/Navbar.svelte`
 * **Design & Logic**:
   1. Standardizes app categories under "Workbenches" and "User" dropdown menus.
   2. Spawns an event listener in `onMount` that intercepts window clicks. If target is clicked outside `.nav-item` divs, collapses category arrays.
   3. Rotates chevron arrow vector graphics using reactive active CSS class bindings.
 
 ### F. Collapsible Hierarchical Node Navigator (`OpcUaTreeNode.svelte`)
-* **File path**: [src/main/frontend/src/lib/OpcUaTreeNode.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/OpcUaTreeNode.svelte)
+* **File path**: `src/main/frontend/src/lib/OpcUaTreeNode.svelte`
 * **Design & Logic**:
   1. Recursively mounts children branches to display the entire parsed OPC-UA address space (Objects as directories, Variables as values, Methods as execution buttons).
   2. Uses Svelte 5 `$derived` state to resolve node telemetry values against the WebSocket dictionary (`wsManager.opcUaUpdates`).
@@ -88,7 +88,7 @@ src/main/frontend/
   4. Infers payload datatypes (Boolean, Integer, Double, String) depending on variable names and value structures.
 
 ### G. SVG Process mimic Simulator (`SynopticView.svelte`)
-* **File path**: [src/main/frontend/src/lib/SynopticView.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/SynopticView.svelte)
+* **File path**: `src/main/frontend/src/lib/SynopticView.svelte`
 * **Design & Logic**:
   1. Simulates water storage vessels using SVG shapes: Storage Tank T-101 (200px width, 220px height, scale ticks), Feed Pump impeller blades, and Drain Valves.
   2. Configures a loop using `$effect` that:
@@ -98,7 +98,7 @@ src/main/frontend/
   3. Captures Space/Enter key events on the valve group to guarantee keyboard accessibility.
 
 ### H. SVG Chart Plottings (`TimeSeriesChart.svelte`)
-* **File path**: [src/main/frontend/src/lib/TimeSeriesChart.svelte](file:///home/vortigern/git/nunki/src/main/frontend/src/lib/TimeSeriesChart.svelte)
+* **File path**: `src/main/frontend/src/lib/TimeSeriesChart.svelte`
 * **Design & Logic**:
   1. Calculates layout ranges (maxX, minX, maxY, minY) based on cached timestamps and frequency amplitudes using derived states.
   2. Employs linear interpolation math to map coordinates to pixel points inside the SVG drawing frame.
